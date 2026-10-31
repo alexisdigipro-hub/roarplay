@@ -200,7 +200,7 @@ function parseDetail(text) {
 
 async function probeBraw(file) {
   const b = await brawInfo(file);
-  if (b.error || !b.width) return { container: '', error: b.error || 'Not a Blackmagic RAW clip', video: null, audio: [], detail: { format: { name: 'braw', tags: {} }, streams: [], chapters: [] }, subs: [], chapters: [], raw: '' };
+  if (b.error || !b.width) return { container: '', error: b.error || 'Not a Blackmagic RAW clip', readerError: b.error || 'Not a Blackmagic RAW clip', video: null, audio: [], detail: { format: { name: 'braw', tags: {} }, streams: [], chapters: [] }, subs: [], chapters: [], raw: '' };
   const fps = b.fps || 24, duration = b.frames / fps;
   const a = b.audio && b.audio.channels ? [{ index: 1, lang: '', codec: `pcm_s${b.audio.bits > 16 ? 24 : 16}le`, profile: '', sampleRate: b.audio.rate, channels: b.audio.channels === 1 ? 'mono' : b.audio.channels === 2 ? 'stereo' : `${b.audio.channels} ch`, bits: b.audio.bits, bitrate: b.audio.rate * b.audio.bits * b.audio.channels }] : [];
   const tags = { camera: b.camera || '', frames: String(b.frames) };
@@ -264,6 +264,8 @@ function plan(info, file, platform = process.platform, track = 0) {
   const ext = path.extname(file).slice(1).toLowerCase();
   if (info && info.braw && !info.error) return { mode: 'transcode' };
   const raw = rawOf(file);
+  // the reader is there but could not open the clip: say why, not only who else opens it
+  if (raw && info && info.readerError) return { mode: 'none', why: 'failed', detail: `${raw[0]}: ${info.readerError}` };
   if (raw) return { mode: 'none', why: 'raw', format: raw[0], app: raw[1] };
   if (!info || info.error || (!info.video && !info.audio.length)) return { mode: 'none', why: 'unreadable' };
   if (info.sequence) return { mode: 'transcode' };
