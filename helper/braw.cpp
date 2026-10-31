@@ -103,8 +103,10 @@ class Callback : public IBlackmagicRawCallback {
       default: break;
     }
     if (!bpp || !iw || !ih) { note("format", fmt, iw, ih, size); return {}; }
-    const size_t stride = size / ih; // rows may be padded
-    if (stride < (size_t)iw * bpp) { note("size", fmt, iw, ih, size); return {}; }
+    // the rows are packed; the SDK rounds the whole buffer up (to 4 KB pages), so the size says nothing about the rows:
+    // reading size / height as the row length shifted each row by a few pixels (Alex's URSA Cine 17K clip, 1 Nov)
+    const size_t stride = (size_t)iw * bpp;
+    if ((size_t)size < stride * ih) { note("size", fmt, iw, ih, size); return {}; }
     if (iw != W || ih != H) note("scale", fmt, iw, ih, size);
     std::vector<uint8_t> o((size_t)W * H * 4);
     for (uint32_t y = 0; y < H; y++) {
