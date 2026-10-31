@@ -11,6 +11,7 @@ contextBridge.exposeInMainWorld('api', {
   saveList: (job) => ipcRenderer.invoke('save-list', job),
   pickFolder: () => ipcRenderer.invoke('pick-folder'),
   onTop: (on) => ipcRenderer.invoke('on-top', on),
+  brawLook: (l) => ipcRenderer.invoke('braw-look', l),
   setDefault: (job) => ipcRenderer.invoke('set-default', job),
   defaultStatus: (exts) => ipcRenderer.invoke('default-status', exts),
   fileKinds: () => ipcRenderer.invoke('file-kinds'),

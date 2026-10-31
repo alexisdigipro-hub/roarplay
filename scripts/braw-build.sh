@@ -39,6 +39,11 @@ for S in 1 2 4 8; do
   GOT=$(build/helper/roarplay-braw video "$SAMPLE" 0 "$S" | wc -c | tr -d ' ')
   echo "scale $S: $GOT bytes, want $WANT"; test "$GOT" = "$WANT"
 done
+# the colours (Rec.709, the camera's LUT, as shot): each gives a whole frame, each a picture to look at
+for L in 709 lut shot; do
+  build/helper/roarplay-braw video "$SAMPLE" 0 4 "$L" | "$FF" -hide_banner -loglevel error -y -f rawvideo -pix_fmt rgba -s "$W2" -i pipe:0 -frames:v 1 "$W/look-$L.png"
+  test -s "$W/look-$L.png"
+done
 if node -e "process.exit(JSON.parse(process.argv[1]).audio.channels ? 0 : 1)" "$INFO"; then
   build/helper/roarplay-braw audio "$SAMPLE" 0 | head -c 192000 | wc -c
 fi

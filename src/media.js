@@ -78,6 +78,11 @@ let BRAW = '';
 const setBrawPath = (p) => { BRAW = p && require('fs').existsSync(p) ? p : ''; };
 const isBraw = (file) => /\.braw$/i.test(file);
 const brawReady = () => !!BRAW;
+// how a BRAW picture is coloured (Alex, 31 Oct): '709' Rec.709 (the default), 'lut' the LUT the camera wrote into the
+// clip (Rec.709 where it has none), 'shot' as the camera was set (Film, Extended Video...)
+let BRAW_LOOK = '709';
+const setBrawLook = (l) => { BRAW_LOOK = ['709', 'lut', 'shot'].includes(l) ? l : '709'; };
+const brawLook = () => BRAW_LOOK;
 function brawInfo(file) {
   return new Promise((resolve) => {
     execFile(BRAW, ['info', file], { windowsHide: true, timeout: 30000 }, (e, out, err) => {
@@ -97,7 +102,7 @@ function brawSource(file, info, part, start, maxH) {
   const s = brawScale(b.height, maxH);
   const w = Math.floor(b.width / s), h = Math.floor(b.height / s);
   const frame = Math.max(0, Math.round(start * b.fps));
-  return { cmd: ['video', file, String(frame), String(s)], input: ['-f', 'rawvideo', '-pix_fmt', 'rgba', '-s', `${w}x${h}`, '-r', String(b.fps), '-i', 'pipe:0'], scale: s, w, h, frame };
+  return { cmd: ['video', file, String(frame), String(s), BRAW_LOOK], input: ['-f', 'rawvideo', '-pix_fmt', 'rgba', '-s', `${w}x${h}`, '-r', String(b.fps), '-i', 'pipe:0'], scale: s, w, h, frame };
 }
 
 // ---------- what a file is made of ----------
@@ -208,7 +213,7 @@ async function probeBraw(file) {
     container: 'braw', duration, start: 0, bitrate: 0, timecode: b.timecode || '', title: '', artist: '', album: '', cover: false, subtitles: 0, braw: b, phase: 0,
     video: { index: 0, codec: 'braw', profile: b.camera || '', pixfmt: 'raw', colour: '', interlaced: false, width: b.width, height: b.height, fps, bitrate: 0 },
     audio: a, subs: [], chapters: [],
-    detail: { format: { name: 'Blackmagic RAW', tags, duration: '', start: '0', bitrate: 0 }, streams: [{ index: 0, id: '', lang: '', type: 'Video', line: `braw, ${b.width}x${b.height}, ${fps} fps`, parts: ['Blackmagic RAW', 'raw', `${b.width}x${b.height}`, '', `${fps} fps`], flags: [], tags: { camera: b.camera || '', timecode: b.timecode || '' }, side: [] }, ...(a.length ? [{ index: 1, id: '', lang: '', type: 'Audio', line: `pcm, ${b.audio.rate} Hz, ${b.audio.channels} ch, ${b.audio.bits} bit`, parts: [`pcm (${b.audio.bits} bit)`, `${b.audio.rate} Hz`, a[0].channels, `s${b.audio.bits}`], flags: [], tags: {}, side: [] }] : [])], chapters: [], programs: 0 },
+    detail: { format: { name: 'Blackmagic RAW', tags, duration: '', start: '0', bitrate: 0 }, streams: [{ index: 0, id: '', lang: '', type: 'Video', line: `braw, ${b.width}x${b.height}, ${fps} fps`, parts: ['Blackmagic RAW', 'raw', `${b.width}x${b.height}`, '', `${fps} fps`], flags: [], tags: { camera: b.camera || '', timecode: b.timecode || '', gamma: b.gamma || '', gamut: b.gamut || '', 'camera LUT': b.cameraLut ? 'yes' : 'no' }, side: [] }, ...(a.length ? [{ index: 1, id: '', lang: '', type: 'Audio', line: `pcm, ${b.audio.rate} Hz, ${b.audio.channels} ch, ${b.audio.bits} bit`, parts: [`pcm (${b.audio.bits} bit)`, `${b.audio.rate} Hz`, a[0].channels, `s${b.audio.bits}`], flags: [], tags: {}, side: [] }] : [])], chapters: [], programs: 0 },
     raw: JSON.stringify(b, null, 2),
   };
 }
@@ -564,4 +569,4 @@ function parseCube(text) {
   return lut;
 }
 
-module.exports = { setFfmpegPath, ffmpegPath, setBrawPath, brawReady, isBraw, brawSource, brawScale, brawInfo, VIDEO_EXT, AUDIO_EXT, SUB_EXT, RAW, kindOf, rawOf, isUrl, sequenceOf, inputArgs, parts, parseProbe, parseDetail, probe, plan, streamArgs, mimeOf, firstPacket, waveform, cover, frameAt, thumb, subtitles, subtitleFilesBeside, windowPlaysVideo, packets, _sortPackets, qc, packetFindings, parseCube };
+module.exports = { setFfmpegPath, ffmpegPath, setBrawPath, setBrawLook, brawLook, brawReady, isBraw, brawSource, brawScale, brawInfo, VIDEO_EXT, AUDIO_EXT, SUB_EXT, RAW, kindOf, rawOf, isUrl, sequenceOf, inputArgs, parts, parseProbe, parseDetail, probe, plan, streamArgs, mimeOf, firstPacket, waveform, cover, frameAt, thumb, subtitles, subtitleFilesBeside, windowPlaysVideo, packets, _sortPackets, qc, packetFindings, parseCube };

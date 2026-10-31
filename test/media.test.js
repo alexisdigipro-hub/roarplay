@@ -150,7 +150,7 @@ const ok = (what) => { n++; console.log(`  ✓ ${what}`); };
   assert.strictEqual(m.brawScale(2160, 1080), 2); assert.strictEqual(m.brawScale(4320, 1080), 4); assert.strictEqual(m.brawScale(1080, 1080), 1); assert.strictEqual(m.brawScale(6144, 0), 1); assert.strictEqual(m.brawScale(12288, 720), 8);
   const bi = { braw: { width: 6144, height: 3456, fps: 24, frames: 240, audio: { channels: 2, bits: 24, rate: 48000 } }, video: { fps: 24 }, audio: [{}] };
   const sv = m.brawSource('/x/A001.braw', bi, 'video', 2.5, 1080);
-  assert.deepStrictEqual(sv.cmd, ['video', '/x/A001.braw', '60', '4']); assert.ok(sv.input.join(' ').includes('-pix_fmt rgba -s 1536x864 -r 24 -i pipe:0'));
+  assert.deepStrictEqual(sv.cmd, ['video', '/x/A001.braw', '60', '4', '709']); m.setBrawLook('lut'); assert.strictEqual(m.brawSource('/x/A001.braw', bi, 'video', 0, 1080).cmd[4], 'lut'); m.setBrawLook('nonsense'); assert.strictEqual(m.brawLook(), '709'); assert.ok(sv.input.join(' ').includes('-pix_fmt rgba -s 1536x864 -r 24 -i pipe:0'));
   const sa = m.brawSource('/x/A001.braw', bi, 'audio', 2.5, 1080);
   assert.deepStrictEqual(sa.cmd, ['audio', '/x/A001.braw', '120000']); assert.ok(sa.input.join(' ').includes('-f s24le -ar 48000 -ac 2 -i pipe:0'));
   assert.strictEqual(m.plan(bi, '/x/A001.braw').mode, 'transcode');

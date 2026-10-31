@@ -8,7 +8,7 @@ const DEFAULTS = {
   lang: 'en', autoUpdate: true, atEnd: 'next', clockMode: 'tc', volume: 1, muted: false, side: true, sideTab: 'queue',
   speed: 1, keepPitch: true, subSize: 'm', subDelay: 0, subOn: true,
   fitMode: 'contain', aspect: 0, zoom: 1, rot: 0, flipH: false, flipV: false, brightness: 1, contrast: 1, saturation: 1, followPic: true, onTop: false,
-  playQuality: 1080, seqFps: 24, resume: true, snapFormat: 'png', snapWhere: 'beside', snapDir: '',
+  playQuality: 1080, brawLook: '709', seqFps: 24, resume: true, snapFormat: 'png', snapWhere: 'beside', snapDir: '',
   chan: 'stereo', audDelay: 0, outDevice: '', eq: [0, 0, 0, 0, 0, 0, 0, 0, 0, 0], shuffle: false,
   scopeKind: 'waveform', keyTicks: false, lutFile: '', lutMix: 1, cmpMode: 'wipe', quiet: true,
   keepQueue: true, autoplayOpen: true, jumpSecs: 1, keepLook: true, startVolume: 'keep', keepSound: true, subAuto: true, subLang: '', idleSecs: 2, sideStart: true, bezelTop: false, snapName: 'tc',
@@ -47,7 +47,7 @@ const EL = {
   'Language': 'Γλώσσα', 'The words of the app': 'Οι λέξεις της εφαρμογής', 'Playing': 'Αναπαραγωγή', 'When a file ends': 'Όταν τελειώνει ένα αρχείο',
   'Stop': 'Σταματά', 'Next': 'Επόμενο', 'Repeat': 'Ξανά', 'The clock shows': 'Το ρολόι δείχνει', 'Timecode': 'Timecode', 'Time': 'Χρόνο', 'Frames': 'Καρέ',
   'Picture made on the fly': 'Εικόνα που φτιάχνεται επιτόπου', 'ProRes, DNxHR, MXF and the rest are made H.264 while they play. 1080p is smooth on every computer; Full keeps the size and asks much more of it.': 'ProRes, DNxHR, MXF και τα υπόλοιπα γίνονται H.264 την ώρα που παίζουν. Το 1080p είναι ομαλό σε κάθε υπολογιστή· το Full κρατά το μέγεθος και του ζητά πολύ περισσότερα.',
-  'Full': 'Πλήρες', 'Image sequences play at': 'Τα image sequences παίζουν σε', 'Go on where you left off': 'Συνέχισε από εκεί που έμεινες', 'A file you had stopped in the middle opens there again.': 'Ένα αρχείο που σταμάτησες στη μέση ανοίγει πάλι εκεί.',
+  'Full': 'Πλήρες', 'Blackmagic RAW colour': 'Χρώμα Blackmagic RAW', 'Rec.709 shows the clip as a finished picture; the camera\'s LUT is the one it recorded into the clip; As shot keeps the camera\'s setting (Film is flat, for grading).': 'Το Rec.709 δείχνει το κλιπ σαν τελειωμένη εικόνα· το LUT της κάμερας είναι αυτό που έγραψε μέσα στο κλιπ· το Όπως τραβήχτηκε κρατά τη ρύθμιση της κάμερας (το Film είναι επίπεδο, για grading).', 'Camera LUT': 'LUT κάμερας', 'As shot': 'Όπως τραβήχτηκε', 'Image sequences play at': 'Τα image sequences παίζουν σε', 'Go on where you left off': 'Συνέχισε από εκεί που έμεινες', 'A file you had stopped in the middle opens there again.': 'Ένα αρχείο που σταμάτησες στη μέση ανοίγει πάλι εκεί.',
   'Window': 'Παράθυρο', 'Saved frames': 'Αποθηκευμένα καρέ', 'Format': 'Μορφή', 'Saved to': 'Αποθήκευση σε', 'Beside the file': 'Δίπλα στο αρχείο', 'Desktop': 'Επιφάνεια εργασίας', 'A folder…': 'Σε φάκελο…',
   'Open with RoarPlay': 'Άνοιγμα με το RoarPlay', 'Double-clicking a file opens it in RoarPlay': 'Το διπλό κλικ σε αρχείο το ανοίγει στο RoarPlay', 'Video': 'Βίντεο',
   'RoarPlay now opens {n} kinds of file.': 'Το RoarPlay ανοίγει τώρα {n} είδη αρχείων.', 'Pick RoarPlay in the window that opened.': 'Διάλεξε το RoarPlay στο παράθυρο που άνοιξε.', 'It could not be set': 'Δεν ορίστηκε',
@@ -1071,7 +1071,7 @@ function toast(html) {
 }
 // the segmented choices: which one is on comes from S (or the side tab)
 const MIRROR = { fitMode2: 'fitMode', subSize2: 'subSize' };
-const SEG_VAL = { sideTab: () => S.sideTab, fitMode: () => S.fitMode, fitMode2: () => S.fitMode, subSize2: () => S.subSize, playQuality: () => String(S.playQuality), seqFps: () => String(S.seqFps), jumpSecs: () => String(S.jumpSecs), idleSecs: () => String(S.idleSecs), scopeKind: () => S.scopeKind, cmpMode: () => S.cmpMode };
+const SEG_VAL = { sideTab: () => S.sideTab, fitMode: () => S.fitMode, fitMode2: () => S.fitMode, subSize2: () => S.subSize, playQuality: () => String(S.playQuality), brawLook: () => S.brawLook, seqFps: () => String(S.seqFps), jumpSecs: () => String(S.jumpSecs), idleSecs: () => String(S.idleSecs), scopeKind: () => S.scopeKind, cmpMode: () => S.cmpMode };
 function placeLenses() {
   for (const seg of $$('.seg')) {
     const id = seg.id;
@@ -1097,6 +1097,7 @@ for (const seg of $$('.seg')) {
     else if (seg.id === 'subSize2') { S.subSize = val; applySubSize(); }
     else if (seg.id === 'jumpSecs' || seg.id === 'idleSecs') { S[seg.id] = +val; }
     else if (seg.id === 'playQuality') { S.playQuality = +val; if (cur?.mode === 'transcode') { const at = pos(), p = !v.paused; startAt(main, at, p); } }
+    else if (seg.id === 'brawLook') { S.brawLook = val; window.api.brawLook(val); if (cur?.info?.braw) { const at = pos(), p = !v.paused; startAt(main, at, p); } }
     else if (seg.id === 'scopeKind') { S.scopeKind = val; drawScopeNow(); }
     else if (seg.id === 'cmpMode') { S.cmpMode = val; applyCompare(); }
     else if (seg.id === 'seqFps') { S.seqFps = +val; }
@@ -1796,6 +1797,7 @@ applyAudio();
 showSide();
 showSideTab();
 applyLang();
+window.api.brawLook(S.brawLook);
 drawFacts();
 // the queue from last time, not playing by itself
 queue = S.keepQueue ? fetchStore('queue', []).filter((q) => q && q.file) : [];
