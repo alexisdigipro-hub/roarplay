@@ -69,6 +69,8 @@ class Callback : public IBlackmagicRawCallback {
   void SidecarMetadataParseWarning(IBlackmagicRawClip*, CFStringRef, uint32_t, CFStringRef) override {}
   void SidecarMetadataParseError(IBlackmagicRawClip*, CFStringRef, uint32_t, CFStringRef) override {}
   void PreparePipelineComplete(void*, HRESULT) override {}
+  // Blackmagic RAW 6.0 reads sound through jobs too; this reader asks for sound directly (GetAudioSamples)
+  void ReadAudioComplete(IBlackmagicRawJob*, HRESULT, IBlackmagicRawAudioBuffer*) override {}
   HRESULT STDMETHODCALLTYPE QueryInterface(REFIID, LPVOID*) override { return E_NOTIMPL; }
   ULONG STDMETHODCALLTYPE AddRef(void) override { return 0; }
   ULONG STDMETHODCALLTYPE Release(void) override { return 0; }
