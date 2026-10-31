@@ -59,6 +59,22 @@ these is happening.
 - **Full screen** with F or a double click; the controls hide when the mouse rests.
 - **Open with RoarPlay** (Settings): make RoarPlay the app for video or sound files (on Windows the system's Default apps
   page opens, where you pick RoarPlay).
+
+## The professional side (Scopes and Notes tabs)
+
+- **Meters** per channel (sample peak, with a peak hold) and **loudness** as EBU R128 measures it: momentary, short-term,
+  integrated (gated), loudness range and peak, of what you hear. A button starts the integrated reading again.
+- **Scopes** of the picture on screen: luma waveform, RGB parade, vectorscope (with the 75% targets), histogram.
+- **GOP**: read the packets once (no decoding) and see every frame around the playhead as I, P or B, the keyframes on
+  the bar, the bitrate over the whole file, the average GOP.
+- **QC report**: one pass over the whole file finds black stretches, frozen picture, silence, missing frames and decode
+  errors, each with its time (a click goes there), and measures the loudness (integrated, range, true peak). Save it as text.
+- **LUT**: a .cube (3D or 1D, from Resolve or any grading tool) on the picture, with an amount slider, through the GPU.
+- **Compare**: a second file over the first, as a wipe you drag or side by side, locked to the first's clock, with an
+  offset in frames.
+- **Notes**: a rating (1 to 5, the number keys) and markers with a note (N at the frame on screen), shown on the bar,
+  saved as CSV or as an EDL that DaVinci Resolve imports as timeline markers.
+- **Hear**: with 5.1 sound, the centre alone (dialogue) or the surrounds alone, besides left, right, mono and swapped.
 - Double-click a file in the Finder or Explorer, or drop it on the app, and RoarPlay opens it.
 - **Settings** (the gear, Cmd/Ctrl+,): English or Greek, what happens at the end of a file, what the clock shows,
   automatic updates, the list of keys.

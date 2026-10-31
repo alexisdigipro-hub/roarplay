@@ -36,6 +36,13 @@ goes through `t()` or a data-i18n attribute and gets its Greek.
   resume positions, the queue kept and as M3U, thumbnails on the bar (media.js thumb), image sequences (media.js
   sequenceOf / inputArgs), web addresses, picture in picture, always on top, the small bezel (body.compact, main.js
   'compact'), full Info (media.js parseDetail), Open with RoarPlay (helper/setdefault.swift built in CI, Resources/bin).
+- 0.3.0 (the professional side, Alex 31 Oct): the player is an object (`main`, and `B` for the compare) so startAt / feed /
+  keepFed / closeMse take a player; Scopes tab: meters and loudness (src/lufs-worklet.js, K-weighting and 100 ms blocks;
+  renderer.js onLufsBlock gates and sums), scopes from a 192px copy of the frame (drawScopeNow), GOP and bitrate from
+  media.js packets (framecrc, no decoding), the QC report from media.js qc (blackdetect, freezedetect, silencedetect,
+  ebur128, decode errors) plus packet gaps; Notes tab: rating and markers in localStorage 'notes', CSV and EDL out
+  (main.js save-text); LUT: media.js parseCube, a WebGL2 3D texture in #glc over the video (applyLut / drawLutFrame);
+  compare: B player over A, wipe or side by side, syncB every 300 ms; six-channel downmix in applyAudio.
 - Releases: bump `version` in package.json, tag `vX.Y.Z`, push the tag (.github/workflows/desktop.yml); the release's
   files are the download links (themadlions.com/lab/roarplay/) and what src/updater.js looks at.
 - Work on a branch, open a PR, wait for the green check (.github/workflows/check.yml), merge it yourself.

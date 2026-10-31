@@ -81,10 +81,12 @@ function offerApplications() {
 // ---------- playing what the window cannot play: ffmpeg into rp://play/<id> ----------
 
 const sessions = new Map(); // id -> { file, info, mode, start, track, part }
-const running = new Set();  // ffmpeg processes now playing
+const running = new Map();  // session id -> ffmpeg process now playing
 let lastId = 0;
 
-function stopAll() { for (const p of running) { try { p.kill('SIGKILL'); } catch {} } running.clear(); }
+function stopAll(ids = null) {
+  for (const [id, p] of running) { if (ids && !ids.includes(id)) continue; try { p.kill('SIGKILL'); } catch {} running.delete(id); }
+}
 
 // ffmpeg's output as the response's body. On a Mac the picture is made with the Mac's own encoder first; if that
 // cannot start (no output at all), the same again with x264. An ffmpeg that fails before any output is told to the page.
@@ -95,14 +97,14 @@ function playStream(s) {
     const args = media.streamArgs(s.file, s.info, s.mode, s.start, { track: s.track, hw, part: s.part, maxH: s.maxH });
     const p = spawn(media.ffmpegPath(), args, { windowsHide: true });
     proc = p;
-    running.add(p);
+    running.set(s.id, p);
     let got = false, err = '';
     p.stdout.on('data', () => { got = true; });
     p.stdout.pipe(out, { end: false });
     p.stderr.on('data', (d) => { err = (err + d).slice(-2000); });
     p.on('error', (e) => { err = e.message; });
     p.on('close', (code) => {
-      running.delete(p);
+      if (running.get(s.id) === p) running.delete(s.id);
       if (out.destroyed) return;
       if (!got && hw && code !== 0) return run(false);
       if (!got && code !== 0) win?.webContents.send('stream-error', { id: s.id, error: err.trim().split('\n').pop() || `ffmpeg ${code}` });
@@ -111,7 +113,7 @@ function playStream(s) {
   };
   run(s.part === 'video' && s.mode === 'transcode' && process.platform === 'darwin');
   // the page let go (another file, a seek, closed): ffmpeg stops
-  out.on('close', () => { if (proc) { try { proc.kill('SIGKILL'); } catch {} running.delete(proc); } });
+  out.on('close', () => { if (proc) { try { proc.kill('SIGKILL'); } catch {} if (running.get(s.id) === proc) running.delete(s.id); } });
   return Readable.toWeb(out);
 }
 
@@ -206,7 +208,7 @@ ipcMain.handle('stream', async (_e, { file, info, mode, start = 0, track = 0, pa
   sessions.set(id, { id, file, info, mode, start: from, track, part, maxH });
   return { id, url: `rp://play/${id}`, offset };
 });
-ipcMain.handle('stop', () => stopAll());
+ipcMain.handle('stop', (_e, ids) => stopAll(Array.isArray(ids) ? ids : null));
 
 ipcMain.handle('waveform', (_e, { file, track, duration }) => media.waveform(file, track, 1600, duration));
 ipcMain.handle('cover', async (_e, file) => { const b = await media.cover(file); return b ? `data:image/jpeg;base64,${b.toString('base64')}` : null; });
@@ -266,6 +268,34 @@ ipcMain.handle('set-default', (_e, kind) => {
       resolve({ ok: done > 0, done, of: exts.length, detail: lines.filter((l) => !/=ok$/.test(l)).join(', ') });
     });
   });
+});
+
+// the professional side (0.3): the packets, the QC report, a LUT, the notes saved out
+const scans = new Map(); // file -> packets, kept while the app runs
+ipcMain.handle('packets', async (_e, { file, info }) => {
+  if (scans.has(file)) return scans.get(file);
+  const pk = await media.packets(file, info, { onProgress: (p) => win?.webContents.send('scan-progress', { file, p }) });
+  if (scans.size > 20) scans.delete(scans.keys().next().value);
+  scans.set(file, pk);
+  return pk;
+});
+ipcMain.handle('qc', (_e, { file, info }) => media.qc(file, info, { onProgress: (p) => win?.webContents.send('qc-progress', { file, p }) }));
+ipcMain.handle('pick-lut', async () => {
+  const r = await dialog.showOpenDialog(win, { properties: ['openFile'], filters: [{ name: 'LUT (.cube)', extensions: ['cube'] }] });
+  if (r.canceled) return null;
+  try { return { file: r.filePaths[0], lut: media.parseCube(fs.readFileSync(r.filePaths[0], 'utf8')) }; } catch (e) { return { file: r.filePaths[0], error: e.message }; }
+});
+ipcMain.handle('read-lut', (_e, file) => { try { return { file, lut: media.parseCube(fs.readFileSync(file, 'utf8')) }; } catch (e) { return { file, error: e.message }; } });
+ipcMain.handle('pick-one', async (_e, lang) => {
+  const r = await dialog.showOpenDialog(win, { properties: ['openFile'], filters: [{ name: lang === 'el' ? 'Βίντεο και ήχος' : 'Video and sound', extensions: ALL }, { name: lang === 'el' ? 'Όλα τα αρχεία' : 'All files', extensions: ['*'] }] });
+  return r.canceled ? null : r.filePaths[0];
+});
+// the notes (markers, rating, the QC report) saved as a text file the person names: CSV, EDL or plain text
+ipcMain.handle('save-text', async (_e, { name, text, ext, lang }) => {
+  const r = await dialog.showSaveDialog(win, { defaultPath: path.join(app.getPath('documents'), name), filters: [{ name: ext.toUpperCase(), extensions: [ext] }] });
+  if (r.canceled || !r.filePath) return null;
+  fs.writeFileSync(r.filePath, text);
+  return r.filePath;
 });
 
 ipcMain.handle('reveal', (_e, file) => shell.showItemInFolder(file));
