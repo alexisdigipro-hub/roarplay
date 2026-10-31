@@ -48,6 +48,15 @@ goes through `t()` or a data-i18n attribute and gets its Greek.
   `sdk-braw`, `scripts/braw-build.sh` (desktop.yml and braw-check.yml, Mac) builds the reader universal and proves it
   on the SDK's sample.braw. Shipped as Resources/bin/roarplay-braw with BlackmagicRawAPI.framework beside it. media.js:
   probeBraw, brawSource (reader args + ffmpeg rawvideo / PCM input), brawScale; main.js pipes the reader into ffmpeg.
+- 0.4.1 to 0.4.5 (Alex, 31 Oct, on his own clips): the quarantine mark is taken off Resources/bin at start; the build
+  takes the newest SDK zip (BRAW 6.0); the BRAW colour (Settings > Playing: Rec.709 / camera LUT / as shot, braw.cpp
+  lookFor, media.js setBrawLook); braw.cpp toRGBA makes any SDK output the size ffmpeg was told, and rows are packed
+  (the SDK rounds the buffer up to 4 KB pages: size / height is not the row length; this was the stripes on URSA Cine).
+- 0.5.0 RED R3D: helper/r3d.cpp, scripts/r3d-build.sh (universal, RED's dylibs beside it), SDK in draft release sdk-r3d.
+  media.js carries a RED clip as info.braw with reader 'r3d' (readerPath, BGRA, s32le), one path for both readers.
+- Camera clips to prove on: Alex sends them with RoarTransfer, sdk.yml (name braw-clip / r3d-clip) keeps them in
+  draft releases (over 2 GB in parts); braw-check.yml and r3d-check.yml decode them at every scale and print a small
+  picture as base64 between ==LOOK== markers, to be looked at before a release. Never ship a camera fix unseen.
 - Releases: bump `version` in package.json, tag `vX.Y.Z`, push the tag (.github/workflows/desktop.yml); the release's
   files are the download links (themadlions.com/lab/roarplay/) and what src/updater.js looks at.
 - Work on a branch, open a PR, wait for the green check (.github/workflows/check.yml), merge it yourself.
