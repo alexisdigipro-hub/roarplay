@@ -39,7 +39,7 @@ struct Out {
 
 class Callback : public IBlackmagicRawCallback {
  public:
-  explicit Callback(Out* o, BlackmagicRawResolutionScale scale) : out(o), scale(scale) {}
+  Callback(Out* o, BlackmagicRawResolutionScale scale, uint32_t w, uint32_t h) : out(o), scale(scale), W(w), H(h) {}
   virtual ~Callback() {}
   void ReadComplete(IBlackmagicRawJob* readJob, HRESULT result, IBlackmagicRawFrame* frame) override {
     uint64_t* idx = nullptr;
@@ -57,9 +57,11 @@ class Callback : public IBlackmagicRawCallback {
     uint64_t* idx = nullptr;
     job->GetUserData((void**)&idx);
     std::vector<uint8_t> bytes;
-    void* data = nullptr; uint32_t size = 0;
-    if (result == S_OK && image->GetResource(&data) == S_OK && image->GetResourceSizeBytes(&size) == S_OK && data)
-      bytes.assign((uint8_t*)data, (uint8_t*)data + size);
+    void* data = nullptr; uint32_t size = 0, iw = 0, ih = 0;
+    BlackmagicRawResourceFormat fmt = blackmagicRawResourceFormatRGBAU8;
+    if (result == S_OK && image->GetResource(&data) == S_OK && image->GetResourceSizeBytes(&size) == S_OK && data &&
+        image->GetWidth(&iw) == S_OK && image->GetHeight(&ih) == S_OK && image->GetResourceFormat(&fmt) == S_OK)
+      bytes = toRGBA((const uint8_t*)data, size, iw, ih, fmt);
     finish(idx, std::move(bytes));
     job->Release();
   }
@@ -76,6 +78,42 @@ class Callback : public IBlackmagicRawCallback {
   ULONG STDMETHODCALLTYPE Release(void) override { return 0; }
 
  private:
+  // what the SDK hands back, made exactly W x H RGBA 8-bit, the size ffmpeg was told: the SDK may decode a camera at
+  // another size than asked (a scale it does not offer), pad its rows, or keep another format; any of these, written
+  // as they came, shears the picture into grey stripes (Alex's URSA Cine clip, 31 Oct)
+  std::vector<uint8_t> toRGBA(const uint8_t* src, uint32_t size, uint32_t iw, uint32_t ih, BlackmagicRawResourceFormat fmt) {
+    int bpp = 0; bool bgr = false, wide = false;
+    switch (fmt) {
+      case blackmagicRawResourceFormatRGBAU8: bpp = 4; break;
+      case blackmagicRawResourceFormatBGRAU8: bpp = 4; bgr = true; break;
+      case blackmagicRawResourceFormatRGBAU16: bpp = 8; wide = true; break;
+      case blackmagicRawResourceFormatBGRAU16: bpp = 8; wide = true; bgr = true; break;
+      case blackmagicRawResourceFormatRGBU16: bpp = 6; wide = true; break;
+      default: break;
+    }
+    if (!bpp || !iw || !ih) { note("format", fmt, iw, ih, size); return {}; }
+    const size_t stride = size / ih; // rows may be padded
+    if (stride < (size_t)iw * bpp) { note("size", fmt, iw, ih, size); return {}; }
+    if (iw != W || ih != H) note("scale", fmt, iw, ih, size);
+    std::vector<uint8_t> o((size_t)W * H * 4);
+    for (uint32_t y = 0; y < H; y++) {
+      const uint8_t* row = src + (size_t)((uint64_t)y * ih / H) * stride;
+      uint8_t* d = o.data() + (size_t)y * W * 4;
+      for (uint32_t x = 0; x < W; x++, d += 4) {
+        const uint8_t* p = row + (size_t)((uint64_t)x * iw / W) * bpp;
+        uint8_t c[4];
+        if (wide) { const uint16_t* q = (const uint16_t*)p; for (int i = 0; i < 3; i++) c[i] = q[i] >> 8; c[3] = 255; }
+        else { c[0] = p[0]; c[1] = p[1]; c[2] = p[2]; c[3] = 255; }
+        d[0] = bgr ? c[2] : c[0]; d[1] = c[1]; d[2] = bgr ? c[0] : c[2]; d[3] = c[3];
+      }
+    }
+    return o;
+  }
+  void note(const char* what, int fmt, uint32_t iw, uint32_t ih, uint32_t size) {
+    static std::atomic<bool> said{false};
+    if (said.exchange(true)) return;
+    fprintf(stderr, "braw %s: asked %ux%u, got %ux%u format 0x%08X, %u bytes\n", what, W, H, iw, ih, (unsigned)fmt, size);
+  }
   void finish(uint64_t* idx, std::vector<uint8_t> bytes) {
     if (!idx) return;
     { std::lock_guard<std::mutex> l(out->m); if (bytes.empty()) out->failed = true; out->done[*idx] = std::move(bytes); out->inFlight--; }
@@ -84,6 +122,7 @@ class Callback : public IBlackmagicRawCallback {
   }
   Out* out;
   BlackmagicRawResolutionScale scale;
+  uint32_t W, H;
 };
 
 static int fail(const char* what) { fprintf(stderr, "%s\n", what); return 1; }
@@ -161,7 +200,9 @@ int main(int argc, char** argv) {
     int s = argc > 4 ? atoi(argv[4]) : 1;
     BlackmagicRawResolutionScale scale = s >= 8 ? blackmagicRawResolutionScaleEighth : s >= 4 ? blackmagicRawResolutionScaleQuarter : s >= 2 ? blackmagicRawResolutionScaleHalf : blackmagicRawResolutionScaleFull;
     Out out;
-    Callback cb(&out, scale);
+    const int sd = s >= 8 ? 8 : s >= 4 ? 4 : s >= 2 ? 2 : 1;
+    Callback cb(&out, scale, w / sd, h / sd); // the size media.js brawSource tells ffmpeg
+
     codec->SetCallback(&cb);
     const int ahead = 6; // frames decoded at once on the SDK's threads
     uint64_t next = first, write = first;

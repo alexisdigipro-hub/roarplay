@@ -33,6 +33,12 @@ W2=$(node -e "const i=JSON.parse(process.argv[1]); console.log(Math.floor(i.widt
 FF=${FFMPEG:-vendor/ffmpeg/darwin-$(uname -m | sed s/x86_64/x64/)/ffmpeg}
 build/helper/roarplay-braw video "$SAMPLE" 0 4 | "$FF" -hide_banner -loglevel error -y -f rawvideo -pix_fmt rgba -s "$W2" -i pipe:0 -frames:v 1 "$W/frame.png"
 ls -la "$W/frame.png"; test -s "$W/frame.png"
+# every scale hands ffmpeg exactly the bytes of the size media.js tells it, or the picture shears
+for S in 1 2 4 8; do
+  WANT=$(node -e "const i=JSON.parse(process.argv[1]),s=+process.argv[2]; console.log(Math.floor(i.width/s)*Math.floor(i.height/s)*4*Math.max(1,i.frames))" "$INFO" "$S")
+  GOT=$(build/helper/roarplay-braw video "$SAMPLE" 0 "$S" | wc -c | tr -d ' ')
+  echo "scale $S: $GOT bytes, want $WANT"; test "$GOT" = "$WANT"
+done
 if node -e "process.exit(JSON.parse(process.argv[1]).audio.channels ? 0 : 1)" "$INFO"; then
   build/helper/roarplay-braw audio "$SAMPLE" 0 | head -c 192000 | wc -c
 fi
