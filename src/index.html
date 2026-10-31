@@ -1,0 +1,141 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' file: data:; media-src 'self' file: blob:; connect-src 'self' rp:; style-src 'self' 'unsafe-inline'" />
+  <title>RoarPlay</title>
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<!-- English is the key of every text; the Greek is in renderer.js (EL). data-i18n: text, data-i18n-html: HTML,
+     data-i18n-label: aria-label and title. The queue, the info and the timecode are drawn by renderer.js. -->
+<body>
+  <header class="top">
+    <div class="wm"><span>ROAR</span><b>PLAY</b></div>
+    <span class="ver" id="ver"></span>
+    <div class="spacer"></div>
+    <button class="btn sm upd" id="update" hidden><span class="dot"></span><span data-i18n>Restart to update</span></button>
+    <button class="btn sm" id="open"><svg viewBox="0 0 24 24"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg><span data-i18n>Open</span></button>
+    <button class="ib" id="toggleSide" data-i18n-label="Queue and info" aria-label="Queue and info"><svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="3"/><path d="M15 4v16"/></svg></button>
+    <button class="ib" id="openSettings" data-i18n-label="Settings" aria-label="Settings"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg></button>
+  </header>
+
+  <main>
+    <section class="stage" id="stage">
+      <div class="screen" id="screen">
+        <video id="v" preload="auto" playsinline></video>
+
+        <!-- nothing open yet -->
+        <div class="home" id="home">
+          <div id="drop" class="drop">
+            <div class="ring" aria-hidden="true"></div>
+            <div class="drop-in">
+              <div class="dz-i"><svg viewBox="0 0 24 24"><path d="M8 5.5v13l10.5-6.5z"/></svg></div>
+              <h1 data-i18n-html>Plays <b>everything</b>.</h1>
+              <p data-i18n>Every video and every sound: ProRes, DNxHR, MXF, MKV, AVI, WAV, FLAC, AC3 and the rest. All on your own computer.</p>
+              <button id="browse" class="btn main" data-i18n>Choose files</button>
+              <small data-i18n>or drop files and folders anywhere</small>
+            </div>
+          </div>
+        </div>
+
+        <!-- a sound file: its picture or a glyph, its name -->
+        <div class="sound" id="sound" hidden>
+          <div class="art" id="art"><svg viewBox="0 0 24 24"><path d="M9 18V6l11-2v12"/><circle cx="6.5" cy="18" r="2.5"/><circle cx="17.5" cy="16" r="2.5"/></svg></div>
+          <div class="sound-t"><b id="soundTitle"></b><span id="soundBy"></span></div>
+        </div>
+
+        <!-- what cannot be played, and why -->
+        <div class="msg" id="msg" hidden><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 7.5v5.5M12 16.5v.01"/></svg><b id="msgTitle"></b><span id="msgText"></span></div>
+
+        <div class="spin" id="spin" hidden></div>
+        <div class="shuttle" id="shuttle" hidden></div>
+        <div class="over-all" id="overAll"><div><svg viewBox="0 0 24 24"><path d="M8 5.5v13l10.5-6.5z"/></svg><span data-i18n>Drop to play</span></div></div>
+      </div>
+
+      <div class="transport" id="transport">
+        <div class="bar" id="bar">
+          <canvas id="wave"></canvas>
+          <div class="buf" id="buf"></div>
+          <div class="range" id="range" hidden></div>
+          <div class="done" id="done"></div>
+          <div class="head" id="head"></div>
+          <div class="tip" id="tip" hidden></div>
+        </div>
+        <div class="row">
+          <div class="clock">
+            <button class="tc" id="tc" data-i18n-label="Timecode, time or frames" aria-label="Timecode, time or frames">00:00:00:00</button>
+            <span class="len" id="len"></span>
+          </div>
+          <div class="keys">
+            <button class="ib" id="markIn" data-i18n-label="Mark in (I)" aria-label="Mark in (I)"><svg viewBox="0 0 24 24"><path d="M8 5v14M8 5h5M8 19h5"/></svg></button>
+            <button class="ib" id="stepBack" data-i18n-label="One frame back (Left arrow)" aria-label="One frame back (Left arrow)"><svg viewBox="0 0 24 24"><path d="M6 6v12M18 6l-9 6 9 6z"/></svg></button>
+            <button class="ib" id="rew" data-i18n-label="Back, faster each press (J)" aria-label="Back, faster each press (J)"><svg viewBox="0 0 24 24"><path d="M11 6l-8 6 8 6zM21 6l-8 6 8 6z"/></svg></button>
+            <button class="play" id="play" data-i18n-label="Play or pause (Space)" aria-label="Play or pause (Space)"><svg class="i-play" viewBox="0 0 24 24"><path d="M8 5.5v13l10.5-6.5z"/></svg><svg class="i-pause" viewBox="0 0 24 24"><path d="M8 5v14M16 5v14"/></svg></button>
+            <button class="ib" id="fwd" data-i18n-label="Forward, faster each press (L)" aria-label="Forward, faster each press (L)"><svg viewBox="0 0 24 24"><path d="M13 6l8 6-8 6zM3 6l8 6-8 6z"/></svg></button>
+            <button class="ib" id="stepFwd" data-i18n-label="One frame forward (Right arrow)" aria-label="One frame forward (Right arrow)"><svg viewBox="0 0 24 24"><path d="M18 6v12M6 6l9 6-9 6z"/></svg></button>
+            <button class="ib" id="markOut" data-i18n-label="Mark out (O)" aria-label="Mark out (O)"><svg viewBox="0 0 24 24"><path d="M16 5v14M16 5h-5M16 19h-5"/></svg></button>
+          </div>
+          <div class="tools">
+            <button class="ib" id="loop" data-i18n-label="Loop (Cmd/Ctrl+L)" aria-label="Loop (Cmd/Ctrl+L)"><svg viewBox="0 0 24 24"><path d="M17 2l3 3-3 3"/><path d="M4 11V9a4 4 0 0 1 4-4h12M7 22l-3-3 3-3"/><path d="M20 13v2a4 4 0 0 1-4 4H4"/></svg></button>
+            <button class="ib" id="snap" data-i18n-label="Save this frame as PNG (Cmd/Ctrl+Shift+S)" aria-label="Save this frame as PNG (Cmd/Ctrl+Shift+S)"><svg viewBox="0 0 24 24"><path d="M4 8a2 2 0 0 1 2-2h2l1.5-2h5L16 6h2a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2z"/><circle cx="12" cy="12.5" r="3.5"/></svg></button>
+            <div class="vol">
+              <button class="ib" id="mute" data-i18n-label="Sound on or off (M)" aria-label="Sound on or off (M)"><svg class="i-on" viewBox="0 0 24 24"><path d="M4 9.5h3.5L12 5.5v13l-4.5-4H4z"/><path d="M15.5 9a4 4 0 0 1 0 6M18 6.5a7.5 7.5 0 0 1 0 11"/></svg><svg class="i-off" viewBox="0 0 24 24"><path d="M4 9.5h3.5L12 5.5v13l-4.5-4H4z"/><path d="M16 9.5l5 5M21 9.5l-5 5"/></svg></button>
+              <input type="range" id="volume" min="0" max="1" step="0.01" data-i18n-label="Volume" aria-label="Volume" />
+            </div>
+            <button class="ib" id="full" data-i18n-label="Full screen (F)" aria-label="Full screen (F)"><svg viewBox="0 0 24 24"><path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"/></svg></button>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <aside class="side" id="side">
+      <div class="side-head">
+        <div class="seg wide" id="sideTab"><button data-v="queue" data-i18n>Queue</button><button data-v="info" data-i18n>Info</button></div>
+      </div>
+      <div class="side-body" id="queueBox">
+        <ol class="queue" id="queue"></ol>
+        <div class="empty" id="queueEmpty" data-i18n>Drop files or folders to line them up.</div>
+        <div class="side-foot"><button class="btn sm" id="addMore"><svg viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg><span data-i18n>Add</span></button><span class="spacer"></span><button class="btn sm" id="clearQueue" data-i18n>Clear</button></div>
+      </div>
+      <div class="side-body" id="infoBox" hidden>
+        <div class="facts" id="facts"></div>
+      </div>
+    </aside>
+  </main>
+  <div class="toast" id="toast" hidden></div>
+
+  <!-- Settings: the language, what happens at the end of a file, the updates, the keys. Cmd/Ctrl+, opens it too. -->
+  <div class="veil" id="settings" hidden>
+    <div class="sheet" role="dialog" aria-modal="true" aria-labelledby="setTitle">
+      <div class="set-head"><h3 id="setTitle" data-i18n>Settings</h3><button class="ib" id="closeSettings" data-i18n-label="Close" aria-label="Close"><svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></svg></button></div>
+
+      <div class="label" data-i18n>Language</div>
+      <div class="set-box">
+        <div class="set-row"><span><span data-i18n>The words of the app</span></span>
+          <div class="seg" id="lang"><button data-v="en">English</button><button data-v="el">Ελληνικά</button></div></div>
+      </div>
+
+      <div class="label" data-i18n>Playing</div>
+      <div class="set-box">
+        <div class="set-row"><span><span data-i18n>When a file ends</span></span>
+          <div class="seg" id="atEnd"><button data-v="stop" data-i18n>Stop</button><button data-v="next" data-i18n>Next</button><button data-v="repeat" data-i18n>Repeat</button></div></div>
+        <div class="set-row"><span><span data-i18n>The clock shows</span></span>
+          <div class="seg" id="clockMode"><button data-v="tc" data-i18n>Timecode</button><button data-v="time" data-i18n>Time</button><button data-v="frames" data-i18n>Frames</button></div></div>
+      </div>
+
+      <div class="label" data-i18n>Updates</div>
+      <div class="set-box">
+        <div class="set-row"><span><b id="updName">RoarPlay</b><small id="updStatus"></small></span>
+          <button class="btn sm" id="updCheck" data-i18n>Check now</button>
+          <button class="btn sm main" id="updRestart" hidden data-i18n>Restart to update</button></div>
+        <label class="check"><input type="checkbox" id="autoUpdate" /><span><span data-i18n>Update by itself</span><small data-i18n>Looks for a new version every two hours, brings it in the background and puts it in when RoarPlay closes.</small></span></label>
+      </div>
+
+      <div class="label" data-i18n>Keys</div>
+      <div class="set-box keys-list" id="keysList"></div>
+    </div>
+  </div>
+
+  <script src="renderer.js"></script>
+</body>
+</html>

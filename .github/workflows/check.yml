@@ -1,0 +1,26 @@
+name: Check RoarPlay
+
+# Every push and pull request: the scripts parse, and the engine works on real files made with ffmpeg
+# (what each file is made of, how it is played, the ffmpeg that plays it, waveform, snapshot).
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: npm install --no-audit --no-fund
+      - name: Syntax of every script
+        run: |
+          for f in src/*.js scripts/*.js test/*.js; do node --check "$f"; done
+          node -e "require('./package.json')"
+      - name: The engine on real files
+        run: npm test
