@@ -5,7 +5,7 @@ name: Check the RED R3D reader
 on:
   pull_request:
     branches: [main]
-    paths: ['helper/r3d.cpp', 'scripts/r3d-build.sh', '.github/workflows/r3d-check.yml']
+    paths: ['helper/r3d.cpp', 'scripts/r3d-build.sh', '.github/workflows/r3d-check.yml', 'package.json', 'src/media.js', 'src/main.js']
   workflow_dispatch:
 
 permissions:
@@ -58,3 +58,16 @@ jobs:
           ./roarplay-r3d video "$C" 0 4 | ffmpeg -hide_banner -loglevel error -y -f rawvideo -pix_fmt bgra -s "$WH" -i pipe:0 -frames:v 1 -vf scale=480:-2 -q:v 6 look.jpg
           ls -la look.jpg; echo "==LOOK=="; base64 -w0 look.jpg; echo; echo "==END=="
           ./roarplay-r3d audio "$C" 0 | head -c 192000 | wc -c
+
+  # the Mac build of the reader, as desktop.yml makes it, proved on Alex's clip
+  r3d-mac:
+    runs-on: macos-latest
+    env:
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: node scripts/fetch-ffmpeg.js darwin-arm64
+      - run: FFMPEG=vendor/ffmpeg/darwin-arm64/ffmpeg bash scripts/r3d-build.sh
