@@ -18,8 +18,8 @@ jobs:
       - name: Bring the SDK
         run: |
           gh release download sdk-braw -R "$GITHUB_REPOSITORY" -D sdk
-          cd sdk && unzip -q *.zip && ls -la
-          hdiutil attach -nobrowse -readonly -mountpoint /tmp/brawdmg *.dmg
+          cd sdk && unzip -q "$(ls *.zip | sort -V | tail -1)" && ls -la
+          hdiutil attach -nobrowse -readonly -mountpoint /tmp/brawdmg "$(ls *.dmg | sort -V | tail -1)"
           ls -la /tmp/brawdmg
           PKG=$(ls /tmp/brawdmg/*.pkg | head -1); echo "pkg: $PKG"
           pkgutil --expand-full "$PKG" /tmp/brawpkg
@@ -40,6 +40,16 @@ jobs:
           grep -n "class BMD_PUBLIC IBlackmagicRawFactory" -A 12 "$H" || true
           grep -n "blackmagicRawResolutionScale\|blackmagicRawResourceFormat\|CreateBlackmagicRawFactoryInstance" "$H" | head -40
           grep -n "IID_IBlackmagicRawClipAudio\|IID_IBlackmagicRawClipEx\|IID_IBlackmagicRawConfiguration " "$H" | head
+      - name: Colour (gamma, gamut, the camera's LUT)
+        run: |
+          H=$(find /tmp/brawpkg -name BlackmagicRawAPI.h -path "*Mac*" | head -1)
+          grep -n "class BMD_PUBLIC IBlackmagicRawClipProcessingAttributes" -A 40 "$H" || true
+          grep -n "class BMD_PUBLIC IBlackmagicRawFrameProcessingAttributes" -A 20 "$H" || true
+          grep -n "class BMD_PUBLIC IBlackmagicRawPost3DLUT" -A 20 "$H" || true
+          grep -n "class BMD_PUBLIC IBlackmagicRawVariant\b\|struct Variant" -A 30 "$H" || true
+          grep -n "blackmagicRawClipProcessingAttribute\|blackmagicRawVariantType\|CloneClipProcessingAttributes\|GetPost3DLUT\|Post3DLUT" "$H" | head -60
+          grep -n "VariantInit\|VariantClear\|SafeArray\|BSTR\|CFStringRef bstrVal" "$H" | head -20
+          grep -rn "Gamma\|Gamut\|709" /tmp/brawpkg --include=*.cpp -l | head; S=$(grep -rln "blackmagicRawClipProcessingAttributeGamma" /tmp/brawpkg --include=*.cpp | grep Mac | head -1); echo "S=$S"; [ -n "$S" ] && grep -n "Gamma\|Gamut\|Variant\|LUT" "$S" | head -80 || true
       - name: A sample
         run: |
           S=$(find /tmp/brawpkg -path "*Mac*Samples*ExtractFrame*" -name "*.cpp" | head -1); echo "S=$S"; cat "$S" | head -260
