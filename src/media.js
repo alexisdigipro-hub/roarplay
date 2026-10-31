@@ -35,12 +35,39 @@ const RAW = {
   cine: ['Phantom Cine', 'Phantom PCC or DaVinci Resolve'],
 };
 
+const SEQ_EXT = ['dpx', 'exr', 'png', 'jpg', 'jpeg', 'tif', 'tiff', 'tga', 'bmp'];
+const isUrl = (f) => /^https?:\/\//i.test(f);
+const reEsc = (x) => x.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+// an image sequence: frames numbered in the name (A001_0001.dpx, shot.00123.exr); the sequence's pattern and its first number
+function sequenceOf(file) {
+  const ext = path.extname(file).slice(1).toLowerCase();
+  if (!SEQ_EXT.includes(ext)) return null;
+  const m = /^(.*?)(\d{3,})(\.[^.]+)$/.exec(path.basename(file));
+  if (!m) return null;
+  const dir = path.dirname(file);
+  let names;
+  try { names = require('fs').readdirSync(dir); } catch { return null; }
+  const re = new RegExp(`^${reEsc(m[1])}(\\d{${m[2].length}})${reEsc(m[3])}$`, 'i');
+  const nums = names.map((n) => re.exec(n)).filter(Boolean).map((x) => +x[1]).sort((a, b) => a - b);
+  if (nums.length < 2) return null;
+  return { pattern: path.join(dir, `${m[1]}%0${m[2].length}d${m[3]}`), start: nums[0], count: nums.length, first: path.join(dir, `${m[1]}${String(nums[0]).padStart(m[2].length, '0')}${m[3]}`) };
+}
+// ffmpeg's input arguments for a file, a web address or a sequence (at `fps` frames a second)
+function inputArgs(file, { fps = 24 } = {}) {
+  const seq = sequenceOf(file);
+  if (seq) return ['-framerate', String(fps), '-start_number', String(seq.start), '-i', seq.pattern];
+  if (isUrl(file)) return ['-reconnect', '1', '-reconnect_streamed', '1', '-reconnect_delay_max', '5', '-i', file];
+  return ['-i', file];
+}
+
 function kindOf(file) {
   const ext = path.extname(file).slice(1).toLowerCase();
   if (RAW[ext]) return 'raw';
   // .mod is both a camcorder video and a tracker song: a camcorder's, as far more people have those
   if (VIDEO_EXT.includes(ext)) return 'video';
   if (AUDIO_EXT.includes(ext)) return 'audio';
+  if (isUrl(file)) return 'url';
+  if (sequenceOf(file)) return 'sequence';
   return null;
 }
 const rawOf = (file) => RAW[path.extname(file).slice(1).toLowerCase()] || null;
@@ -114,11 +141,48 @@ function parseProbe(text) {
   return info;
 }
 
-function probe(file) {
+// everything ffmpeg says about a file, as it says it (Alex, 31 Oct: "every piece of information it has, all of it"):
+// the wrapper and its tags, every stream with its own line broken into facts, its tags and side data, the chapters
+function parseDetail(text) {
+  const d = { format: { name: '', tags: {} }, streams: [], chapters: [], programs: 0 };
+  let cur = null; // where a Metadata: block belongs: the format, a stream or a chapter
+  let inMeta = false, inSide = false;
+  for (const raw of text.split('\n')) {
+    const line = raw.replace(/\r$/, '');
+    let m;
+    if ((m = /^Input #0, (.+?), from '/.exec(line))) { d.format.name = m[1]; cur = d.format; inMeta = inSide = false; continue; }
+    if ((m = /^\s+Duration: ([\d:.]+|N\/A)(?:, start: (-?[\d.]+))?(?:, bitrate: (\d+) kb\/s)?/.exec(line))) { d.format.duration = m[1]; d.format.start = m[2] || ''; d.format.bitrate = m[3] ? +m[3] * 1000 : 0; cur = d.format; inMeta = inSide = false; continue; }
+    if ((m = /^\s+Chapter #0:(\d+): start ([\d.]+), end ([\d.]+)/.exec(line))) { cur = { index: +m[1], start: +m[2], end: +m[3], tags: {} }; d.chapters.push(cur); inMeta = inSide = false; continue; }
+    if (/^\s+Program /.test(line)) { d.programs++; cur = null; continue; }
+    if ((m = /^\s+Stream #0:(\d+)(?:\[(0x[0-9a-f]+)\])?(?:\((\w+)\))?: (Video|Audio|Subtitle|Data|Attachment|Unknown): (.*)$/.exec(line))) {
+      const rest = m[5];
+      const flags = (/\(([^()]*(?:default|forced|hearing impaired|visual impaired|attached pic|timed thumbnails|captions|descriptions|metadata|dependent|still image|clean effects|karaoke|original|comment|lyrics|dub)[^()]*)\)\s*$/.exec(rest) || [])[1] || '';
+      const body = flags ? rest.slice(0, rest.lastIndexOf('(')).trim() : rest;
+      cur = { index: +m[1], id: m[2] || '', lang: m[3] || '', type: m[4], line: body, parts: parts(body), flags: flags.split(',').map((x) => x.trim()).filter(Boolean), tags: {}, side: [] };
+      d.streams.push(cur); inMeta = inSide = false; continue;
+    }
+    if (/^\s+Metadata:\s*$/.test(line)) { inMeta = true; inSide = false; continue; }
+    if (/^\s+Side data:\s*$/.test(line)) { inSide = true; inMeta = false; continue; }
+    if (cur && inMeta && (m = /^\s+([^:\s][^:]*?)\s*: ?(.*)$/.exec(line))) { const k = m[1].trim(); if (k in cur.tags) cur.tags[k] += '\n' + m[2]; else cur.tags[k] = m[2]; continue; }
+    if (cur && inSide && cur.side && line.trim()) { cur.side.push(line.trim()); continue; }
+    if (!/^\s/.test(line)) { inMeta = inSide = false; }
+  }
+  return d;
+}
+
+function probe(file, opts = {}) {
   return new Promise((resolve) => {
-    execFile(FFMPEG, ['-hide_banner', '-i', file], { maxBuffer: 16 * 1024 * 1024, windowsHide: true }, (_e, _o, stderr) => {
-      const info = parseProbe(String(stderr || ''));
-      if (!info.container) info.error = (String(stderr || '').trim().split('\n').pop() || 'Cannot read the file').replace(/^.*?: /, '');
+    execFile(FFMPEG, ['-hide_banner', ...inputArgs(file, opts)], { maxBuffer: 16 * 1024 * 1024, windowsHide: true, timeout: 30000 }, (_e, _o, stderr) => {
+      const text = String(stderr || '').replace(/\nAt least one output file must be specified\s*$/, '');
+      const info = parseProbe(text);
+      if (!info.container) info.error = (text.trim().split('\n').pop() || 'Cannot read the file').replace(/^.*?: /, '');
+      info.detail = parseDetail(text);
+      info.raw = text.trim();
+      const seq = sequenceOf(file);
+      if (seq) { info.sequence = { count: seq.count, start: seq.start, fps: opts.fps || 24 }; if (info.video) info.video.fps = opts.fps || 24; info.duration = seq.count / (opts.fps || 24); }
+      // the subtitle tracks, each with its number among them, its language and its title
+      info.subs = info.detail.streams.filter((x) => x.type === 'Subtitle').map((x, n) => ({ n, index: x.index, lang: x.lang && x.lang !== 'und' ? x.lang : '', title: x.tags.title || '', codec: (x.parts[0] || '').split(' ')[0], bitmap: /dvd_subtitle|hdmv_pgs|dvb_subtitle|xsub/.test(x.parts[0] || '') }));
+      info.chapters = info.detail.chapters.map((c) => ({ start: c.start, end: c.end, title: c.tags.title || '' }));
       resolve(info);
     });
   });
@@ -157,6 +221,9 @@ function plan(info, file, platform = process.platform, track = 0) {
   const raw = rawOf(file);
   if (raw) return { mode: 'none', why: 'raw', format: raw[0], app: raw[1] };
   if (!info || info.error || (!info.video && !info.audio.length)) return { mode: 'none', why: 'unreadable' };
+  if (info.sequence) return { mode: 'transcode' };
+  // a web address cannot be read in pieces by the window the way a file can, so it comes through ffmpeg
+  if (isUrl(file)) return info.video ? (copyable(info.video, platform) ? { mode: 'remux' } : { mode: 'transcode' }) : { mode: 'audio' };
   const v = info.video;
   const a = info.audio[track] || null;
   const c = info.container;
@@ -180,8 +247,8 @@ function plan(info, file, platform = process.platform, track = 0) {
 const FRAG = ['-f', 'mp4', '-movflags', 'frag_keyframe+empty_moov+default_base_moof', '-frag_duration', '1000000', '-write_tmcd', '0'];
 
 // ffmpeg's arguments for one part ('video' or 'audio') of `mode` from `start` seconds. hw: the Mac's own H.264 encoder.
-function streamArgs(file, info, mode, start = 0, { track = 0, hw = false, part = 'video', platform = process.platform } = {}) {
-  const head = ['-hide_banner', '-loglevel', 'error', '-nostdin', ...(start > 0 ? ['-ss', start.toFixed(3)] : []), '-i', file];
+function streamArgs(file, info, mode, start = 0, { track = 0, hw = false, part = 'video', platform = process.platform, maxH = 1080 } = {}) {
+  const head = ['-hide_banner', '-loglevel', 'error', '-nostdin', ...(start > 0 ? ['-ss', start.toFixed(3)] : []), ...inputArgs(file, { fps: info.sequence?.fps })];
   const tail = ['-sn', '-dn', '-map_metadata', '-1', '-map_chapters', '-1', ...FRAG, 'pipe:1'];
   if (part === 'audio') {
     const a = Math.min(track, Math.max(0, info.audio.length - 1));
@@ -192,14 +259,16 @@ function streamArgs(file, info, mode, start = 0, { track = 0, hw = false, part =
   if (mode === 'remux') {
     return [...head, '-map', '0:v:0', '-an', '-c:v', 'copy', ...(info.video.codec === 'hevc' ? ['-tag:v', 'hvc1'] : []), ...tail];
   }
-  // transcode: H.264 8-bit 4:2:0, at most 4K, no B-frames (the first frame is `start` exactly), a keyframe every second
+  // transcode: H.264 8-bit 4:2:0, no taller than `maxH` (1080 for playing: four times less work than 4K, and the
+  // screen shows no more; 0 for the full size), no B-frames (the first frame is `start` exactly), a keyframe every second
   const v = info.video;
   const fps = v.fps > 0 && v.fps < 1000 ? v.fps : 25;
-  const filters = [v.interlaced ? 'yadif=0:-1:0' : null, "scale='min(iw,3840)':-2:flags=bicubic", hw ? 'format=nv12' : 'format=yuv420p'].filter(Boolean);
+  const scale = maxH > 0 ? `scale=-2:'min(ih,${maxH})':flags=fast_bilinear` : "scale='min(iw,3840)':-2:flags=bicubic";
+  const filters = [v.interlaced ? 'yadif=0:-1:0' : null, scale, hw ? 'format=nv12' : 'format=yuv420p'].filter(Boolean);
   const enc = hw && platform === 'darwin'
-    ? ['-c:v', 'h264_videotoolbox', '-b:v', '40M', '-realtime', '1', '-profile:v', 'high']
-    : ['-c:v', 'libx264', '-preset', 'ultrafast', '-crf', '16', '-profile:v', 'high'];
-  return [...head, '-map', '0:v:0', '-an', '-vf', filters.join(','), ...enc, '-bf', '0', '-g', String(Math.max(1, Math.round(fps))), ...tail];
+    ? ['-c:v', 'h264_videotoolbox', '-b:v', maxH && maxH <= 1080 ? '16M' : '40M', '-realtime', '1', '-allow_sw', '1', '-profile:v', 'high']
+    : ['-c:v', 'libx264', '-preset', 'ultrafast', '-tune', 'zerolatency', '-crf', '18', '-profile:v', 'high', '-threads', '0'];
+  return [...head, '-map', '0:v:0', '-an', '-vf', filters.join(','), ...enc, '-bf', '0', '-g', String(Math.max(1, Math.round(fps))), '-fps_mode', 'passthrough', ...tail];
 }
 
 // what the window is told each part is
@@ -220,7 +289,7 @@ function mimeOf(info, mode, part) {
 // file's first frame sits, which is where its timecode starts. Asked of ffmpeg itself: one packet, no decoding.
 function firstPacket(file, info, start = 0) {
   return new Promise((resolve) => {
-    execFile(FFMPEG, ['-hide_banner', '-loglevel', 'error', '-nostdin', ...(start > 0 ? ['-ss', start.toFixed(3)] : []), '-copyts', '-i', file, '-map', '0:v:0',
+    execFile(FFMPEG, ['-hide_banner', '-loglevel', 'error', '-nostdin', ...(start > 0 ? ['-ss', start.toFixed(3)] : []), '-copyts', ...inputArgs(file, { fps: info.sequence?.fps }), '-map', '0:v:0',
       '-c', 'copy', '-frames:v', '1', '-f', 'framecrc', '-'], { windowsHide: true }, (_e, out) => {
       const tb = /#tb 0: (\d+)\/(\d+)/.exec(String(out || ''));
       const row = String(out || '').split('\n').find((l) => /^0,/.test(l));
@@ -235,7 +304,7 @@ function firstPacket(file, info, start = 0) {
 // the sound's shape for the timeline: `bins` peaks (0..1), from the whole file read once at 8 kHz mono
 function waveform(file, track = 0, bins = 1200, duration = 0) {
   return new Promise((resolve) => {
-    const p = spawn(FFMPEG, ['-hide_banner', '-loglevel', 'error', '-nostdin', '-i', file, '-map', `0:a:${track}`, '-vn', '-sn', '-dn', '-ac', '1', '-ar', '8000',
+    const p = spawn(FFMPEG, ['-hide_banner', '-loglevel', 'error', '-nostdin', ...inputArgs(file), '-map', `0:a:${track}`, '-vn', '-sn', '-dn', '-ac', '1', '-ar', '8000',
       '-f', 's16le', 'pipe:1'], { windowsHide: true });
     const total = duration > 0 ? Math.ceil(duration * 8000) : 0;
     const per = total ? Math.max(1, Math.floor(total / bins)) : 4000;
@@ -259,17 +328,48 @@ function waveform(file, track = 0, bins = 1200, duration = 0) {
 // an album's picture inside a sound file, as a JPEG
 function cover(file) {
   return new Promise((resolve) => {
-    execFile(FFMPEG, ['-hide_banner', '-loglevel', 'error', '-nostdin', '-i', file, '-map', '0:v:0', '-frames:v', '1', '-vf', "scale='min(iw,900)':-2",
+    execFile(FFMPEG, ['-hide_banner', '-loglevel', 'error', '-nostdin', ...inputArgs(file), '-map', '0:v:0', '-frames:v', '1', '-vf', "scale='min(iw,900)':-2",
       '-c:v', 'mjpeg', '-f', 'image2pipe', 'pipe:1'], { encoding: 'buffer', maxBuffer: 32 * 1024 * 1024, windowsHide: true }, (_e, out) => resolve(out && out.length ? out : null));
   });
 }
 
-// one frame as a PNG (the snapshot), at `at` seconds, at the file's full size
-function frameAt(file, at, out) {
+// one frame as a picture (the snapshot), at `at` seconds, at the file's full size; PNG or JPG by the name
+function frameAt(file, at, out, info = null) {
   return new Promise((resolve, reject) => {
-    execFile(FFMPEG, ['-hide_banner', '-loglevel', 'error', '-nostdin', '-y', '-ss', Math.max(0, at).toFixed(3), '-i', file, '-map', '0:v:0', '-frames:v', '1', out],
+    execFile(FFMPEG, ['-hide_banner', '-loglevel', 'error', '-nostdin', '-y', '-ss', Math.max(0, at).toFixed(3), ...inputArgs(file, { fps: info?.sequence?.fps }), '-map', '0:v:0', '-frames:v', '1',
+      ...(/\.jpe?g$/i.test(out) ? ['-q:v', '2'] : []), out],
       { windowsHide: true }, (e, _o, err) => (e ? reject(new Error(String(err || e.message).trim().split('\n').pop())) : resolve(out)));
   });
 }
 
-module.exports = { setFfmpegPath, ffmpegPath, VIDEO_EXT, AUDIO_EXT, RAW, kindOf, rawOf, parts, parseProbe, probe, plan, streamArgs, mimeOf, firstPacket, waveform, cover, frameAt, windowPlaysVideo };
+// a small frame at `at` seconds for the bar's thumbnail, as a JPEG
+function thumb(file, at, info = null, width = 240) {
+  return new Promise((resolve) => {
+    execFile(FFMPEG, ['-hide_banner', '-loglevel', 'error', '-nostdin', '-ss', Math.max(0, at).toFixed(3), ...inputArgs(file, { fps: info?.sequence?.fps }), '-map', '0:v:0', '-frames:v', '1',
+      '-vf', `scale=${width}:-2:flags=fast_bilinear`, '-c:v', 'mjpeg', '-q:v', '6', '-f', 'image2pipe', 'pipe:1'], { encoding: 'buffer', maxBuffer: 4 * 1024 * 1024, windowsHide: true, timeout: 8000 },
+      (_e, out) => resolve(out && out.length ? out : null));
+  });
+}
+
+// a subtitle track of the file (its number among the subtitle tracks), or a subtitle file (.srt, .ass, .ssa, .vtt, .sub,
+// .sbv, .lrc...), as WebVTT text, which the window shows itself. Bitmap subtitles (DVD, Blu-ray) cannot become text.
+function subtitles(file, { track = null, subFile = null } = {}) {
+  return new Promise((resolve, reject) => {
+    const input = subFile ? ['-i', subFile] : inputArgs(file);
+    const map = subFile ? [] : ['-map', `0:s:${track}`];
+    execFile(FFMPEG, ['-hide_banner', '-loglevel', 'error', '-nostdin', ...input, ...map, '-f', 'webvtt', 'pipe:1'], { maxBuffer: 64 * 1024 * 1024, windowsHide: true, timeout: 60000 },
+      (e, out, err) => (e ? reject(new Error(String(err || e.message).trim().split('\n').pop() || 'Cannot read the subtitles')) : resolve(String(out))));
+  });
+}
+// subtitle files beside a video: the same name, or the same name with a language (Film.el.srt)
+const SUB_EXT = ['srt', 'vtt', 'ass', 'ssa', 'sub', 'sbv', 'lrc', 'stl', 'ttml', 'dfxp'];
+function subtitleFilesBeside(file) {
+  if (isUrl(file)) return [];
+  const dir = path.dirname(file), base = path.parse(file).name.toLowerCase();
+  try {
+    return require('fs').readdirSync(dir).filter((n) => { const p = path.parse(n); return SUB_EXT.includes(p.ext.slice(1).toLowerCase()) && (p.name.toLowerCase() === base || p.name.toLowerCase().startsWith(base + '.')); })
+      .map((n) => ({ file: path.join(dir, n), name: n, lang: (/\.([a-z]{2,3})\.[^.]+$/i.exec(n) || [])[1] || '' }));
+  } catch { return []; }
+}
+
+module.exports = { setFfmpegPath, ffmpegPath, VIDEO_EXT, AUDIO_EXT, SUB_EXT, RAW, kindOf, rawOf, isUrl, sequenceOf, inputArgs, parts, parseProbe, parseDetail, probe, plan, streamArgs, mimeOf, firstPacket, waveform, cover, frameAt, thumb, subtitles, subtitleFilesBeside, windowPlaysVideo };

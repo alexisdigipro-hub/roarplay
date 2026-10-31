@@ -1,4 +1,4 @@
-const { app, BrowserWindow, ipcMain, dialog, screen, shell, protocol } = require('electron');
+const { app, BrowserWindow, ipcMain, dialog, screen, shell, protocol, clipboard } = require('electron');
 const path = require('path');
 const fs = require('fs');
 const { spawn } = require('child_process');
@@ -92,7 +92,7 @@ function playStream(s) {
   const out = new PassThrough({ highWaterMark: 1 << 20 });
   let proc = null;
   const run = (hw) => {
-    const args = media.streamArgs(s.file, s.info, s.mode, s.start, { track: s.track, hw, part: s.part });
+    const args = media.streamArgs(s.file, s.info, s.mode, s.start, { track: s.track, hw, part: s.part, maxH: s.maxH });
     const p = spawn(media.ffmpegPath(), args, { windowsHide: true });
     proc = p;
     running.add(p);
@@ -167,12 +167,26 @@ ipcMain.handle('inspect', (_e, paths) => {
     else if (top) files.push({ file: p, name: path.basename(p), kind: 'unknown', size: st.size }); // ffmpeg may read it anyway
     else skipped.push(path.basename(p));
   };
-  for (const p of paths) walk(p, true);
-  return { files, skipped };
+  for (const p of paths) {
+    if (media.isUrl(p)) { files.push({ file: p, name: p.replace(/^https?:\/\//, '').split('?')[0].split('/').pop() || p, kind: 'url', size: 0 }); continue; }
+    // a saved list (.m3u / .m3u8): its files, in its order
+    if (/\.m3u8?$/i.test(p)) { for (const f of readList(p)) walk(f, true); continue; }
+    walk(p, true);
+  }
+  // one frame of an image sequence stands for the whole sequence; the rest of its frames are left out
+  const seen = new Set();
+  const out = [];
+  for (const f of files) {
+    const seq = f.kind === 'unknown' || f.kind === 'sequence' ? media.sequenceOf(f.file) : null;
+    if (seq) { if (seen.has(seq.pattern)) continue; seen.add(seq.pattern); out.push({ ...f, file: seq.first, name: `${path.basename(seq.pattern).replace(/%0\d+d/, '#')} (${seq.count})`, kind: 'sequence' }); }
+    else out.push(f);
+  }
+  return { files: out, skipped };
 });
 
-ipcMain.handle('probe', async (_e, file) => {
-  const info = await media.probe(file);
+ipcMain.handle('probe', async (_e, file, opts = {}) => {
+  const info = await media.probe(file, opts);
+  try { const st = fs.statSync(file); info.file = { size: st.size, created: st.birthtimeMs || st.ctimeMs, modified: st.mtimeMs }; } catch {}
   // where the first frame sits: the frames, the steps and the timecode count from there
   info.phase = info.video ? Math.max(0, (await media.firstPacket(file, info, 0)).pts) : 0;
   // what the page tells its Media Source each part is, for each way of playing it
@@ -180,16 +194,16 @@ ipcMain.handle('probe', async (_e, file) => {
     'remux/video': info.video ? media.mimeOf(info, 'remux', 'video') : '', 'transcode/video': info.video ? media.mimeOf(info, 'transcode', 'video') : '',
     'film/audio': media.mimeOf(info, 'remux', 'audio'), 'audio/audio': media.mimeOf(info, 'audio', 'audio'),
   } : {};
-  return { info, plan: media.plan(info, file), url: pathToFileURL(file).href, mime };
+  return { info, plan: media.plan(info, file), url: media.isUrl(file) ? file : pathToFileURL(file).href, mime };
 });
 
 // one part ('video' or 'audio') of `file` from `start`: its address, and where its zero is in the file
-ipcMain.handle('stream', async (_e, { file, info, mode, start = 0, track = 0, part = 'video' }) => {
+ipcMain.handle('stream', async (_e, { file, info, mode, start = 0, track = 0, part = 'video', maxH = 1080 }) => {
   const id = ++lastId;
   const from = Math.max(0, info.duration ? Math.min(start, info.duration - 0.05) : start);
   const offset = part === 'video' && mode === 'remux' ? (await media.firstPacket(file, info, from)).dts : from;
   for (const k of sessions.keys()) if (k < id - 8) sessions.delete(k);
-  sessions.set(id, { id, file, info, mode, start: from, track, part });
+  sessions.set(id, { id, file, info, mode, start: from, track, part, maxH });
   return { id, url: `rp://play/${id}`, offset };
 });
 ipcMain.handle('stop', () => stopAll());
@@ -197,17 +211,93 @@ ipcMain.handle('stop', () => stopAll());
 ipcMain.handle('waveform', (_e, { file, track, duration }) => media.waveform(file, track, 1600, duration));
 ipcMain.handle('cover', async (_e, file) => { const b = await media.cover(file); return b ? `data:image/jpeg;base64,${b.toString('base64')}` : null; });
 
-// the frame on screen as a PNG beside the file (on the Desktop when that folder cannot be written)
-ipcMain.handle('snapshot', async (_e, { file, at, label }) => {
-  const name = `${path.parse(file).name} ${label}.png`;
-  let dir = path.dirname(file);
+// the frame on screen as a picture: beside the file, on the Desktop or in a chosen folder (Settings > Saved frames)
+ipcMain.handle('snapshot', async (_e, { file, at, label, info, format = 'png', where = 'beside', folder = '' }) => {
+  const ext = format === 'jpg' ? 'jpg' : 'png';
+  const stem = media.isUrl(file) ? 'RoarPlay' : path.parse(file).name;
+  let dir = where === 'folder' && folder ? folder : where === 'desktop' || media.isUrl(file) ? app.getPath('desktop') : path.dirname(file);
   try { fs.accessSync(dir, fs.constants.W_OK); } catch { dir = app.getPath('desktop'); }
-  let out = path.join(dir, name);
-  for (let i = 2; fs.existsSync(out); i++) out = path.join(dir, `${path.parse(file).name} ${label} ${i}.png`);
-  try { await media.frameAt(file, at, out); return { ok: true, out }; } catch (e) { return { ok: false, error: e.message }; }
+  let out = path.join(dir, `${stem} ${label}.${ext}`);
+  for (let i = 2; fs.existsSync(out); i++) out = path.join(dir, `${stem} ${label} ${i}.${ext}`);
+  try { await media.frameAt(file, at, out, info); return { ok: true, out }; } catch (e) { return { ok: false, error: e.message }; }
+});
+
+// a small frame for the bar's thumbnail
+ipcMain.handle('thumb', async (_e, { file, at, info }) => { const b = await media.thumb(file, at, info); return b ? `data:image/jpeg;base64,${b.toString('base64')}` : null; });
+
+// subtitles: the tracks inside the file and the files beside it, each as WebVTT text when asked
+ipcMain.handle('sub-files', (_e, file) => media.subtitleFilesBeside(file));
+ipcMain.handle('subtitles', async (_e, job) => { try { return { ok: true, vtt: await media.subtitles(job.file, job) }; } catch (e) { return { ok: false, error: e.message }; } });
+ipcMain.handle('pick-sub', async (_e, lang) => {
+  const r = await dialog.showOpenDialog(win, { properties: ['openFile'], filters: [{ name: lang === 'el' ? 'Υπότιτλοι' : 'Subtitles', extensions: media.SUB_EXT }] });
+  return r.canceled ? null : r.filePaths[0];
+});
+
+// the queue as an M3U list, and an M3U read back
+ipcMain.handle('save-list', async (_e, { files, lang }) => {
+  const r = await dialog.showSaveDialog(win, { defaultPath: path.join(app.getPath('documents'), lang === 'el' ? 'Λίστα.m3u8' : 'List.m3u8'), filters: [{ name: 'M3U', extensions: ['m3u8', 'm3u'] }] });
+  if (r.canceled || !r.filePath) return null;
+  fs.writeFileSync(r.filePath, '#EXTM3U\n' + files.map((f) => `#EXTINF:-1,${path.basename(f)}\n${f}`).join('\n') + '\n');
+  return r.filePath;
+});
+function readList(p) {
+  try {
+    const dir = path.dirname(p);
+    return fs.readFileSync(p, 'utf8').split(/\r?\n/).map((l) => l.trim()).filter((l) => l && !l.startsWith('#'))
+      .map((l) => (media.isUrl(l) || path.isAbsolute(l) ? l : path.join(dir, l)));
+  } catch { return []; }
+}
+ipcMain.handle('pick-folder', async () => { const r = await dialog.showOpenDialog(win, { properties: ['openDirectory', 'createDirectory'] }); return r.canceled ? null : r.filePaths[0]; });
+ipcMain.handle('on-top', (_e, on) => { if (win) win.setAlwaysOnTop(!!on, 'floating'); });
+
+// Open with RoarPlay (Alex, 31 Oct): on a Mac the helper tells the system; on Windows the system's own page opens,
+// where the person picks RoarPlay (Windows lets no app do that for itself)
+ipcMain.handle('set-default', (_e, kind) => {
+  const exts = kind === 'video' ? media.VIDEO_EXT : media.AUDIO_EXT;
+  if (process.platform === 'win32') { shell.openExternal('ms-settings:defaultapps?registeredAppUser=RoarPlay').catch(() => shell.openExternal('ms-settings:defaultapps')); return { ok: true, opened: true }; }
+  if (process.platform !== 'darwin') return { ok: false, error: 'Only on a Mac or Windows' };
+  const helper = path.join(process.resourcesPath, 'bin', 'setdefault');
+  if (!app.isPackaged || !fs.existsSync(helper)) return { ok: false, error: 'The helper is missing (it comes with the installed app)' };
+  return new Promise((resolve) => {
+    require('child_process').execFile(helper, ['com.themadlions.roarplay', ...exts], { timeout: 20000 }, (e, out) => {
+      if (e) return resolve({ ok: false, error: e.message });
+      const lines = String(out).trim().split('\n');
+      const done = lines.filter((l) => /=ok$/.test(l)).length;
+      resolve({ ok: done > 0, done, of: exts.length, detail: lines.filter((l) => !/=ok$/.test(l)).join(', ') });
+    });
+  });
 });
 
 ipcMain.handle('reveal', (_e, file) => shell.showItemInFolder(file));
+ipcMain.handle('copy', (_e, text) => clipboard.writeText(String(text || '')));
+
+// the window takes the picture's shape (Alex, 31 Oct): `extra` is what the window holds around the picture (the top
+// row, the transport, the side, the paddings), so the picture itself keeps `ratio` while the window is resized by hand
+ipcMain.handle('fit', (_e, { ratio, extra, resize }) => {
+  if (!win) return;
+  if (!ratio) { win.setAspectRatio(0); return; }
+  win.setAspectRatio(ratio, { width: Math.round(extra.width), height: Math.round(extra.height) });
+  if (!resize) return;
+  // keep the width, give the picture its height; smaller only when the screen is smaller
+  const area = screen.getDisplayMatching(win.getBounds()).workArea;
+  const [w] = win.getContentSize();
+  let pw = w - extra.width, ph = Math.round(pw / ratio);
+  if (ph + extra.height > area.height - 20) { ph = area.height - 20 - extra.height; pw = Math.round(ph * ratio); }
+  const [minW, minH] = win.getMinimumSize();
+  const cw = Math.max(minW, pw + extra.width), ch = Math.max(minH, ph + extra.height);
+  const b = win.getBounds();
+  win.setContentSize(cw, ch);
+  // stay on the screen
+  const nb = win.getBounds();
+  win.setPosition(Math.max(area.x, Math.min(b.x, area.x + area.width - nb.width)), Math.max(area.y, Math.min(b.y, area.y + area.height - nb.height)));
+});
+// the small bezel (Alex, 31 Oct): only the picture, a thin frame, the controls when the mouse comes; the Mac's
+// traffic lights hide with the top row
+ipcMain.handle('compact', (_e, on) => {
+  if (!win) return;
+  if (process.platform === 'darwin') win.setWindowButtonVisibility(!on);
+  win.setMinimumSize(on ? 240 : 760, on ? 160 : 520);
+});
 ipcMain.handle('platform', () => process.platform);
 ipcMain.handle('version', () => app.getVersion());
 ipcMain.handle('title', (_e, t) => { if (win) win.setTitle(t || 'RoarPlay'); });

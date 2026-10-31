@@ -1,49 +1,77 @@
-// RoarPlay's page: the queue, the player, the clock, the keys. What the window cannot play itself comes from ffmpeg
-// through rp://play/<id> (main.js), and every seek outside what has arrived starts ffmpeg again from there.
+// RoarPlay's page: the queue, the player, the clock, the keys, the subtitles, the sound, the picture, the info.
+// What the window cannot play itself comes from ffmpeg through rp://play/<id> (main.js), in pieces (Media Source).
 const $ = (s) => document.querySelector(s);
 const $$ = (s) => [...document.querySelectorAll(s)];
 
 // ---------- Settings, kept on this computer ----------
-const DEFAULTS = { lang: 'en', autoUpdate: true, atEnd: 'next', clockMode: 'tc', volume: 1, muted: false, side: true, sideTab: 'queue' };
+const DEFAULTS = {
+  lang: 'en', autoUpdate: true, atEnd: 'next', clockMode: 'tc', volume: 1, muted: false, side: true, sideTab: 'queue',
+  speed: 1, keepPitch: true, subSize: 'm', subDelay: 0, subOn: true,
+  fitMode: 'contain', aspect: 0, zoom: 1, rot: 0, flipH: false, flipV: false, brightness: 1, contrast: 1, saturation: 1, followPic: true, onTop: false,
+  playQuality: 1080, seqFps: 24, resume: true, snapFormat: 'png', snapWhere: 'beside', snapDir: '',
+  chan: 'stereo', audDelay: 0, outDevice: '', eq: [0, 0, 0, 0, 0, 0, 0, 0, 0, 0], shuffle: false,
+};
 let S = { ...DEFAULTS };
 try { S = { ...DEFAULTS, ...JSON.parse(localStorage.getItem('settings') || '{}') }; } catch {}
 const save = () => { try { localStorage.setItem('settings', JSON.stringify(S)); } catch {} };
+const store = (k, v) => { try { localStorage.setItem(k, JSON.stringify(v)); } catch {} };
+const fetchStore = (k, d) => { try { return JSON.parse(localStorage.getItem(k)) ?? d; } catch { return d; } };
 
 // ---------- Words: English is the key, Greek the choice (as in the other Roar apps) ----------
 const EL = {
   'Restart to update': 'Επανεκκίνηση για ενημέρωση', 'Open': 'Άνοιγμα', 'Queue and info': 'Λίστα και πληροφορίες', 'Settings': 'Ρυθμίσεις',
+  'Open a web address (Cmd/Ctrl+U)': 'Άνοιγμα διεύθυνσης web (Cmd/Ctrl+U)', 'Open a web address': 'Άνοιγμα διεύθυνσης web',
+  'A direct link to a video or sound file (http or https). Pages like YouTube are not links to files: RoarGrab saves those.': 'Ένας άμεσος σύνδεσμος σε αρχείο βίντεο ή ήχου (http ή https). Σελίδες όπως το YouTube δεν είναι σύνδεσμοι αρχείων: αυτές τις κατεβάζει το RoarGrab.',
   'Plays <b>everything</b>.': 'Παίζει <b>τα πάντα</b>.',
-  'Every video and every sound: ProRes, DNxHR, MXF, MKV, AVI, WAV, FLAC, AC3 and the rest. All on your own computer.': 'Κάθε βίντεο και κάθε ήχος: ProRes, DNxHR, MXF, MKV, AVI, WAV, FLAC, AC3 και όλα τα υπόλοιπα. Όλα στον δικό σου υπολογιστή.',
+  'Every video and every sound: ProRes, DNxHR, MXF, MKV, AVI, WAV, FLAC, AC3, image sequences and the rest. All on your own computer.': 'Κάθε βίντεο και κάθε ήχος: ProRes, DNxHR, MXF, MKV, AVI, WAV, FLAC, AC3, image sequences και όλα τα υπόλοιπα. Όλα στον δικό σου υπολογιστή.',
   'Choose files': 'Επιλογή αρχείων', 'or drop files and folders anywhere': 'ή ρίξε αρχεία και φακέλους οπουδήποτε', 'Drop to play': 'Άφησέ τα για να παίξουν',
-  'Timecode, time or frames': 'Timecode, χρόνος ή καρέ', 'Mark in (I)': 'Σημείο In (I)', 'Mark out (O)': 'Σημείο Out (O)',
+  'Timecode, time or frames': 'Timecode, χρόνος ή καρέ', 'Mark in (I)': 'Σημείο In (I)', 'Mark out (O)': 'Σημείο Out (O)', 'Clear in and out (Alt+X)': 'Καθάρισε In και Out (Alt+X)',
+  'In: click to clear': 'In: κλικ για να καθαρίσει', 'Out: click to clear': 'Out: κλικ για να καθαρίσει',
   'One frame back (Left arrow)': 'Ένα καρέ πίσω (αριστερό βέλος)', 'One frame forward (Right arrow)': 'Ένα καρέ μπροστά (δεξί βέλος)',
   'Back, faster each press (J)': 'Πίσω, πιο γρήγορα σε κάθε πάτημα (J)', 'Forward, faster each press (L)': 'Μπροστά, πιο γρήγορα σε κάθε πάτημα (L)',
-  'Play or pause (Space)': 'Παίξε ή σταμάτα (Space)', 'Loop (Cmd/Ctrl+L)': 'Επανάληψη (Cmd/Ctrl+L)', 'Save this frame as PNG (Cmd/Ctrl+Shift+S)': 'Αποθήκευση του καρέ σε PNG (Cmd/Ctrl+Shift+S)',
-  'Sound on or off (M)': 'Ήχος ναι ή όχι (M)', 'Volume': 'Ένταση', 'Full screen (F)': 'Πλήρης οθόνη (F)',
-  'Queue': 'Λίστα', 'Info': 'Πληροφορίες', 'Drop files or folders to line them up.': 'Ρίξε αρχεία ή φακέλους για να μπουν στη σειρά.', 'Add': 'Προσθήκη', 'Clear': 'Καθαρισμός',
+  'Play or pause (Space)': 'Παίξε ή σταμάτα (Space)', 'Loop (Cmd/Ctrl+L)': 'Επανάληψη (Cmd/Ctrl+L)', 'Save this frame as a picture (Cmd/Ctrl+Shift+S)': 'Αποθήκευση του καρέ σε εικόνα (Cmd/Ctrl+Shift+S)',
+  'Sound on or off (M)': 'Ήχος ναι ή όχι (M)', 'Volume': 'Ένταση', 'Full screen (F)': 'Πλήρης οθόνη (F)', 'Speed': 'Ταχύτητα', 'Subtitles (S)': 'Υπότιτλοι (S)', 'Subtitles': 'Υπότιτλοι',
+  'Picture: frame, aspect, look': 'Εικόνα: κάδρο, αναλογία, εμφάνιση', 'Picture': 'Εικόνα', 'Sound: tracks, equalizer, output': 'Ήχος: κανάλια, equalizer, έξοδος', 'Sound': 'Ήχος',
+  'Picture in picture (P)': 'Εικόνα μέσα σε εικόνα (P)', 'Small bezel: only the picture (B)': 'Μικρό bezel: μόνο η εικόνα (B)', 'Back to the full window (B)': 'Πίσω στο κανονικό παράθυρο (B)', 'Always on top': 'Πάντα μπροστά',
+  'Keep the voices\' pitch': 'Οι φωνές κρατούν τον τόνο τους', 'Subtitle file…': 'Αρχείο υποτίτλων…', 'Size': 'Μέγεθος', 'Small': 'Μικρό', 'Normal': 'Κανονικό', 'Large': 'Μεγάλο', 'Delay': 'Καθυστέρηση',
+  'Off': 'Όχι', 'None in the file or beside it.': 'Κανένας στο αρχείο ή δίπλα του.', 'in the file': 'στο αρχείο', 'bitmap, cannot be shown': 'εικόνα, δεν δείχνεται', 'Could not read the subtitles': 'Δεν διαβάστηκαν οι υπότιτλοι',
+  'Frame': 'Κάδρο', 'Fit': 'Ολόκληρο', 'Fill': 'Γέμισμα', 'Aspect': 'Αναλογία', 'Zoom': 'Ζουμ', 'Turn': 'Στροφή', 'Mirror': 'Καθρέφτης', 'Upside down': 'Ανάποδα',
+  'Brightness': 'Φωτεινότητα', 'Contrast': 'Αντίθεση', 'Saturation': 'Κορεσμός', 'Reset the picture': 'Επαναφορά εικόνας', 'Window takes the picture\'s shape': 'Το παράθυρο παίρνει το σχήμα της εικόνας',
+  'On opening, and when you resize it.': 'Στο άνοιγμα, και όταν το μεγαλώνεις ή το μικραίνεις.', 'Stays over the other windows.': 'Μένει πάνω από τα άλλα παράθυρα.',
+  'Hear': 'Ακούς', 'Stereo': 'Στέρεο', 'Left': 'Αριστερό', 'Right': 'Δεξί', 'Mono': 'Μονό', 'Swapped': 'Ανάποδα', 'Output': 'Έξοδος', 'Equalizer': 'Equalizer', 'Flat': 'Επίπεδο', 'Voice': 'Φωνή', 'Bass': 'Μπάσα', 'Bright': 'Φωτεινό',
+  'System default': 'Του συστήματος', 'Sound track {n}': 'Κανάλι ήχου {n}',
+  'Queue': 'Λίστα', 'Info': 'Πληροφορίες', 'Drop files or folders to line them up.': 'Ρίξε αρχεία ή φακέλους για να μπουν στη σειρά.', 'Add': 'Προσθήκη', 'Clear': 'Καθαρισμός', 'Shuffle': 'Τυχαία σειρά', 'Save the list as M3U': 'Αποθήκευση της λίστας σε M3U',
+  'Copy all': 'Αντιγραφή όλων', 'Show in the folder': 'Εμφάνιση στον φάκελο', 'Copied': 'Αντιγράφηκε',
   'Language': 'Γλώσσα', 'The words of the app': 'Οι λέξεις της εφαρμογής', 'Playing': 'Αναπαραγωγή', 'When a file ends': 'Όταν τελειώνει ένα αρχείο',
   'Stop': 'Σταματά', 'Next': 'Επόμενο', 'Repeat': 'Ξανά', 'The clock shows': 'Το ρολόι δείχνει', 'Timecode': 'Timecode', 'Time': 'Χρόνο', 'Frames': 'Καρέ',
+  'Picture made on the fly': 'Εικόνα που φτιάχνεται επιτόπου', 'ProRes, DNxHR, MXF and the rest are made H.264 while they play. 1080p is smooth on every computer; Full keeps the size and asks much more of it.': 'ProRes, DNxHR, MXF και τα υπόλοιπα γίνονται H.264 την ώρα που παίζουν. Το 1080p είναι ομαλό σε κάθε υπολογιστή· το Full κρατά το μέγεθος και του ζητά πολύ περισσότερα.',
+  'Full': 'Πλήρες', 'Image sequences play at': 'Τα image sequences παίζουν σε', 'Go on where you left off': 'Συνέχισε από εκεί που έμεινες', 'A file you had stopped in the middle opens there again.': 'Ένα αρχείο που σταμάτησες στη μέση ανοίγει πάλι εκεί.',
+  'Window': 'Παράθυρο', 'Saved frames': 'Αποθηκευμένα καρέ', 'Format': 'Μορφή', 'Saved to': 'Αποθήκευση σε', 'Beside the file': 'Δίπλα στο αρχείο', 'Desktop': 'Επιφάνεια εργασίας', 'A folder…': 'Σε φάκελο…',
+  'Open with RoarPlay': 'Άνοιγμα με το RoarPlay', 'Double-clicking a file opens it in RoarPlay': 'Το διπλό κλικ σε αρχείο το ανοίγει στο RoarPlay', 'Video': 'Βίντεο',
+  'RoarPlay now opens {n} kinds of file.': 'Το RoarPlay ανοίγει τώρα {n} είδη αρχείων.', 'Pick RoarPlay in the window that opened.': 'Διάλεξε το RoarPlay στο παράθυρο που άνοιξε.', 'It could not be set': 'Δεν ορίστηκε',
   'Updates': 'Ενημερώσεις', 'Check now': 'Έλεγχος τώρα', 'Update by itself': 'Ενημέρωση μόνο του',
   'Looks for a new version every two hours, brings it in the background and puts it in when RoarPlay closes.': 'Ψάχνει νέα έκδοση κάθε δύο ώρες, τη φέρνει στο παρασκήνιο και τη βάζει όταν κλείσει το RoarPlay.',
-  'Keys': 'Πλήκτρα', 'Close': 'Κλείσιμο',
+  'Keys': 'Πλήκτρα', 'Close': 'Κλείσιμο', 'Cancel': 'Ακύρωση',
   'Looking for a new version…': 'Ψάχνει νέα έκδοση…', 'Bringing {v}: {p}%': 'Φέρνει την {v}: {p}%', '{v} is ready: restart to put it in.': 'Η {v} είναι έτοιμη: κάνε επανεκκίνηση για να μπει.',
   'Could not look just now ({e}). It tries again by itself.': 'Δεν μπόρεσε να ψάξει τώρα ({e}). Θα ξαναδοκιμάσει μόνο του.', 'Up to date · looked at {time}': 'Ενημερωμένο · έλεγχος στις {time}',
   'Up to date. It looks by itself.': 'Ενημερωμένο. Ψάχνει μόνο του.', 'Up to date.': 'Ενημερωμένο.',
   'Plays as it is': 'Παίζει όπως είναι', 'Sound made AAC while it plays': 'Ο ήχος γίνεται AAC την ώρα που παίζει', 'Picture made H.264 while it plays': 'Η εικόνα γίνεται H.264 την ώρα που παίζει',
   'Sound made FLAC while it plays': 'Ο ήχος γίνεται FLAC την ώρα που παίζει',
-  'File': 'Αρχείο', 'Picture': 'Εικόνα', 'Sound': 'Ήχος', 'Size': 'Μέγεθος', 'Wrapper': 'Περιτύλιγμα', 'Length': 'Διάρκεια', 'Bitrate': 'Bitrate', 'Starts at': 'Ξεκινά από',
-  'Codec': 'Codec', 'Frame': 'Κάδρο', 'Rate': 'Ρυθμός', 'Colour': 'Χρώμα', 'interlaced': 'πεπλεγμένο', 'Subtitles': 'Υπότιτλοι', 'Title': 'Τίτλος',
-  'Sound track {n}': 'Κανάλι ήχου {n}', 'Nothing open yet.': 'Τίποτα ανοιχτό ακόμα.',
+  'File': 'Αρχείο', 'Wrapper': 'Περιτύλιγμα', 'Length': 'Διάρκεια', 'Bitrate': 'Bitrate', 'Starts at': 'Ξεκινά από', 'Created': 'Δημιουργία', 'Modified': 'Τροποποίηση', 'Where': 'Πού',
+  'Codec': 'Codec', 'Rate': 'Ρυθμός', 'Colour': 'Χρώμα', 'interlaced': 'πεπλεγμένο', 'Title': 'Τίτλος', 'Chapters': 'Κεφάλαια', 'Chapter {n}': 'Κεφάλαιο {n}',
+  'Video stream': 'Ροή εικόνας', 'Sound stream': 'Ροή ήχου', 'Subtitle stream': 'Ροή υποτίτλων', 'Data stream': 'Ροή δεδομένων', 'Attachment': 'Συνημμένο', 'Stream': 'Ροή', 'Flags': 'Σημάδια', 'Side data': 'Πρόσθετα',
+  'Sample format': 'Μορφή δείγματος', 'Pixel format': 'Μορφή pixel', 'Range': 'Εύρος', 'Primaries': 'Primaries', 'Transfer': 'Transfer', 'Matrix': 'Matrix', 'Pixel aspect': 'Αναλογία pixel', 'Display aspect': 'Αναλογία εικόνας',
+  'Time base': 'Βάση χρόνου', 'Frame rate (tbr)': 'Ρυθμός καρέ (tbr)', 'Sequence': 'Sequence', '{n} frames from {s}, at {f} fps': '{n} καρέ από το {s}, σε {f} fps', 'Everything ffmpeg says': 'Όλα όσα λέει το ffmpeg', 'Nothing open yet.': 'Τίποτα ανοιχτό ακόμα.',
   'This file cannot be played here': 'Αυτό το αρχείο δεν παίζει εδώ', '{f} is opened by {app}.': 'Το {f} το ανοίγει το {app}.',
   'This file could not be played': 'Αυτό το αρχείο δεν έπαιξε', 'It may be damaged or not a video or sound file.': 'Μπορεί να είναι χαλασμένο ή να μην είναι αρχείο βίντεο ή ήχου.',
   '{n} left out, not video or sound: {names}': '{n} έμειναν έξω, δεν είναι βίντεο ή ήχος: {names}',
-  'Saved {name}': 'Σώθηκε το {name}', 'Show': 'Δείξε', 'The frame could not be saved': 'Το καρέ δεν σώθηκε',
-  'In': 'In', 'Out': 'Out', 'Loop on': 'Επανάληψη ναι', 'Loop off': 'Επανάληψη όχι',
+  'Saved {name}': 'Σώθηκε το {name}', 'Show': 'Δείξε', 'The frame could not be saved': 'Το καρέ δεν σώθηκε', 'The list was saved': 'Η λίστα σώθηκε',
   'Play, pause': 'Παίξε, σταμάτα', 'Back, forward, faster each press; K stops': 'Πίσω, μπροστά, πιο γρήγορα σε κάθε πάτημα· το K σταματά',
   'Hold K with J or L: one frame': 'Κράτα το K με J ή L: ένα καρέ', 'One frame back or forward': 'Ένα καρέ πίσω ή μπροστά', 'One second back or forward': 'Ένα δευτερόλεπτο πίσω ή μπροστά',
   'Start, end': 'Αρχή, τέλος', 'Mark in, mark out': 'Σημείο In, σημείο Out', 'Go to in, go to out': 'Πήγαινε στο In, στο Out', 'Clear in and out': 'Καθάρισε In και Out',
-  'Play from in to out': 'Παίξε από το In ως το Out', 'Loop': 'Επανάληψη', 'Previous file, next file': 'Προηγούμενο, επόμενο αρχείο', 'Volume up, down': 'Ένταση πάνω, κάτω',
-  'Sound on or off': 'Ήχος ναι ή όχι', 'Full screen': 'Πλήρης οθόνη', 'Save the frame as PNG': 'Το καρέ σε PNG', 'Open files': 'Άνοιγμα αρχείων',
+  'Play from in to out': 'Παίξε από το In ως το Out', 'Loop': 'Επανάληψη', 'Previous file, next file': 'Προηγούμενο, επόμενο αρχείο', 'Previous chapter, next chapter': 'Προηγούμενο, επόμενο κεφάλαιο', 'Volume up, down': 'Ένταση πάνω, κάτω',
+  'Sound on or off': 'Ήχος ναι ή όχι', 'Full screen': 'Πλήρης οθόνη', 'Small bezel': 'Μικρό bezel', 'Picture in picture': 'Εικόνα μέσα σε εικόνα', 'Subtitles on or off': 'Υπότιτλοι ναι ή όχι', 'Slower, faster': 'Πιο αργά, πιο γρήγορα', 'Normal speed': 'Κανονική ταχύτητα',
+  'Save the frame as a picture': 'Το καρέ σε εικόνα', 'Open files': 'Άνοιγμα αρχείων', 'Open a web address': 'Άνοιγμα διεύθυνσης web',
 };
 const t = (en, vars = {}) => {
   let s = (S.lang === 'el' && EL[en]) || en;
@@ -56,8 +84,8 @@ function applyLang() {
   for (const el of $$('[data-i18n-html]')) { el.dataset.en ??= el.innerHTML; el.innerHTML = t(el.dataset.en); }
   for (const el of $$('[data-i18n-label]')) { const k = el.dataset.i18nLabel; el.setAttribute('aria-label', t(k)); el.title = t(k); }
   drawKeys();
-  if (cur) drawFacts();
-  drawQueue();
+  if (cur) { drawFacts(); drawSubsList(); drawTracks(); }
+  drawQueue(); drawDevices(); showSnapDir();
   placeLenses();
 }
 
@@ -71,6 +99,8 @@ function fmtClock(s) {
   return (h ? `${h}:${pad(m)}` : `${m}`) + `:${pad(sec)}`;
 }
 const fmtTime = (s) => { s = Math.max(0, s || 0); const ms = Math.floor((s % 1) * 1000); return `${Math.floor(s / 3600)}:${pad((s % 3600) / 60)}:${pad(s % 60)}.${pad(ms, 3)}`; };
+const fmtDate = (ms) => (ms ? new Date(ms).toLocaleString(S.lang === 'el' ? 'el-GR' : 'en-GB', { dateStyle: 'medium', timeStyle: 'short' }) : '');
+const esc = (s) => String(s ?? '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 
 // ---------- Timecode: SMPTE, drop frame for 29.97 and 59.94 when the file says so (01:00:00;00) ----------
 const nominal = (fps) => Math.round(fps || 25);
@@ -95,7 +125,7 @@ function framesToTc(frames, fps, drop) {
   return `${pad(h)}:${pad(m)}:${pad(s)}${drop ? ';' : ':'}${pad(f)}`;
 }
 
-// ---------- The queue ----------
+// ---------- The queue (kept between sessions) ----------
 let queue = []; // { file, name, kind, size, info?, plan?, bad? }
 let cur = null; // { item, info, plan, mode, track }
 let platform = '';
@@ -103,6 +133,8 @@ const ICON = {
   video: '<svg viewBox="0 0 24 24"><rect x="3" y="5" width="14" height="14" rx="2"/><path d="M17 10l4-2.5v9L17 14"/></svg>',
   audio: '<svg viewBox="0 0 24 24"><path d="M9 18V6l11-2v12"/><circle cx="6.5" cy="18" r="2.5"/><circle cx="17.5" cy="16" r="2.5"/></svg>',
   raw: '<svg viewBox="0 0 24 24"><rect x="3" y="6" width="18" height="13" rx="2"/><circle cx="12" cy="12.5" r="3.5"/><path d="M8 6l1.5-2h5L16 6"/></svg>',
+  url: '<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3a14 14 0 0 1 0 18M12 3a14 14 0 0 0 0 18"/></svg>',
+  sequence: '<svg viewBox="0 0 24 24"><rect x="3" y="7" width="13" height="13" rx="2"/><path d="M7 4h13v13"/></svg>',
   unknown: '<svg viewBox="0 0 24 24"><path d="M6 3h8l4 4v14H6z"/><path d="M14 3v4h4"/></svg>',
 };
 const X = '<svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></svg>';
@@ -116,8 +148,9 @@ function drawQueue() {
     return `<li data-i="${i}" class="${cur?.item === q ? 'on' : ''} ${q.bad ? 'bad' : ''}"><span class="k">${ICON[q.kind] || ICON.unknown}</span>
       <span class="n"><b title="${esc(q.file)}">${esc(q.name)}</b><small>${esc(sub)}</small></span><button class="ib x" data-x="${i}" aria-label="Remove">${X}</button></li>`;
   }).join('');
+  $('#shuffle').classList.toggle('on', S.shuffle);
+  store('queue', queue.map((q) => ({ file: q.file, name: q.name, kind: q.kind, size: q.size })));
 }
-const esc = (s) => String(s ?? '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 
 // each file's facts, two at a time, so the queue shows lengths and sizes
 let probing = 0;
@@ -126,7 +159,7 @@ function probeQueue() {
     const q = queue.find((x) => !x.info && !x.probing);
     if (!q) return;
     q.probing = true; probing++;
-    window.api.probe(q.file).then(({ info, plan, url, mime }) => { Object.assign(q, { info, plan, url, mime, bad: plan.mode === 'none' }); })
+    window.api.probe(q.file, { fps: S.seqFps }).then(({ info, plan, url, mime }) => { Object.assign(q, { info, plan, url, mime, bad: plan.mode === 'none' }); })
       .finally(() => { probing--; drawQueue(); probeQueue(); });
   }
 }
@@ -170,34 +203,41 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
 function setBody(cls, on) { document.body.classList.toggle(cls, !!on); }
 
-async function load(item, { autoplay = true, at = 0, track = 0, mode = null } = {}) {
+async function load(item, { autoplay = true, at = null, track = 0, mode = null } = {}) {
   if (!item) return;
   const token = ++loadToken;
+  rememberPos();
   stopReverse(); shuttle = 0; showShuttle();
   closeMse();
   if (!item.info) {
     showSpin(true);
-    const r = await window.api.probe(item.file);
+    const r = await window.api.probe(item.file, { fps: S.seqFps });
     Object.assign(item, { info: r.info, plan: r.plan, url: r.url, mime: r.mime, bad: r.plan.mode === 'none' });
     if (token !== loadToken) return;
   }
   const plan = item.plan;
-  cur = { item, info: item.info, plan, mode: mode || plan.mode, track };
-  inPt = outPt = null; shownTime = at;
+  cur = { item, info: item.info, plan, mode: mode || plan.mode, track, subs: null, subTrack: null };
+  inPt = outPt = null;
+  // where it was left (Settings > Go on where you left off)
+  if (at == null) { const was = S.resume ? positions[item.file] : 0; at = was && item.info.duration && was > 5 && was < item.info.duration - 5 ? was : 0; }
+  shownTime = at;
   setBody('empty', false);
   $('#screen').classList.remove('blank');
   $('#home').hidden = true;
   $('#msg').hidden = true;
   window.api.title(`${item.name} · RoarPlay`);
-  drawQueue(); drawFacts(); drawRange();
+  drawQueue(); drawFacts(); drawRange(); drawChapters(); drawTracks();
   if (plan.mode === 'none') return cannotPlay(plan);
   const sound = !hasPicture();
   setBody('audio', sound);
   $('#sound').hidden = !sound;
   if (sound) showSound();
-  wave = null; drawWave();
+  wave = null; drawWave(); thumbs.clear();
   if (sound) window.api.waveform({ file: item.file, track, duration: item.info.duration }).then((p) => { if (token === loadToken) { wave = p; drawWave(); } });
   await startAt(at, autoplay);
+  if (token !== loadToken) return;
+  loadSubtitles(token);
+  if (hasPicture()) fitWindow(true);
 }
 
 // the parts a stream is made of, and what the window is told each one is
@@ -266,7 +306,7 @@ async function feed(P, from) {
   await idle(P.sb);
   if (stale()) return;
   try { if (m.ms.readyState === 'open') P.sb.abort(); } catch {}
-  const r = await window.api.stream({ file: cur.item.file, info: cur.info, mode: cur.mode, start: from, track: cur.track, part: P.name });
+  const r = await window.api.stream({ file: cur.item.file, info: cur.info, mode: cur.mode, start: from, track: cur.track, part: P.name, maxH: +S.playQuality });
   if (stale()) return;
   P.id = r.id;
   try { P.sb.timestampOffset = r.offset; } catch {}
@@ -330,12 +370,6 @@ function keepFed() {
 }
 setInterval(keepFed, 250);
 
-// where the window has the file, in file seconds
-function arrived(t) {
-  for (let i = 0; i < v.buffered.length; i++) if (t >= v.buffered.start(i) - 0.0005 && t <= v.buffered.end(i) - 0.04) return true;
-  return false;
-}
-
 // go to `t` seconds of the file. A stream jumps inside what has come; outside it, each part starts again there
 // (`back` seconds earlier when going backwards, so the next steps back are there already)
 function seek(t, { back = 0, play = null } = {}) {
@@ -362,14 +396,15 @@ function fail(detail) {
   cannotPlay({ why: 'failed', detail });
 }
 
-v.addEventListener('loadedmetadata', () => paint());
+v.addEventListener('loadedmetadata', () => { paint(); placeMask(); });
 v.addEventListener('canplay', () => showSpin(false));
 v.addEventListener('waiting', () => { showSpin(true); keepFed(); });
-v.addEventListener('playing', () => { showSpin(false); setBody('playing', true); });
-v.addEventListener('pause', () => { if (!rev) setBody('playing', false); });
+v.addEventListener('playing', () => { showSpin(false); setBody('playing', true); audioStart(); });
+v.addEventListener('pause', () => { if (!rev) setBody('playing', false); rememberPos(); });
 v.addEventListener('seeked', () => { showSpin(false); paint(); });
 v.addEventListener('ended', () => {
   setBody('playing', false); shuttle = 0; showShuttle();
+  forgetPos();
   if (looping) return seek(inPt ?? 0, { play: true });
   if (S.atEnd === 'repeat') return seek(0, { play: true });
   if (S.atEnd === 'next') next(1, true);
@@ -408,12 +443,25 @@ async function showSound() {
   }
 }
 
-// ---------- J / K / L and the reverse ----------
+// where each file was left, for Go on where you left off
+const positions = fetchStore('positions', {});
+function rememberPos() {
+  if (!cur || !duration()) return;
+  const p = pos();
+  if (p > 5 && p < duration() - 5) positions[cur.item.file] = p; else delete positions[cur.item.file];
+  const keys = Object.keys(positions); if (keys.length > 500) delete positions[keys[0]];
+  store('positions', positions);
+}
+function forgetPos() { if (cur) { delete positions[cur.item.file]; store('positions', positions); } }
+setInterval(() => { if (cur && !v.paused) rememberPos(); }, 5000);
+window.addEventListener('beforeunload', rememberPos);
+
+// ---------- J / K / L, the speed and the reverse ----------
 function setShuttle(n) {
   shuttle = n;
   showShuttle();
-  if (n === 0) { stopReverse(); v.pause(); v.playbackRate = 1; return; }
-  if (n > 0) { stopReverse(); v.playbackRate = n; v.play().catch(() => {}); return; }
+  if (n === 0) { stopReverse(); v.pause(); v.playbackRate = S.speed; return; }
+  if (n > 0) { stopReverse(); v.playbackRate = n === 1 ? S.speed : n; v.play().catch(() => {}); return; }
   v.pause();
   startReverse();
 }
@@ -449,6 +497,15 @@ function togglePlay() {
   if (duration() && pos() >= duration() - 0.05) seek(inPt ?? 0);
   setShuttle(1);
 }
+const SPEEDS = [0.25, 0.5, 0.75, 1, 1.25, 1.5, 2, 3, 4];
+function setSpeed(x) {
+  S.speed = Math.max(0.25, Math.min(4, +x || 1)); save();
+  if (shuttle <= 1) v.playbackRate = S.speed;
+  $('#speedBtn').textContent = `${+S.speed.toFixed(2)}×`;
+  $('#speedBtn').classList.toggle('lit', S.speed !== 1);
+  placeLenses();
+}
+function speedStep(n) { const i = SPEEDS.indexOf(S.speed); setSpeed(SPEEDS[Math.max(0, Math.min(SPEEDS.length - 1, (i < 0 ? 3 : i) + n))]); }
 
 // one frame: from the frame on screen, to the next frame's own time
 function step(n) {
@@ -466,16 +523,41 @@ function mark(which) {
   else { outPt = p; if (inPt != null && inPt >= outPt) inPt = null; }
   drawRange();
 }
+function clearMarks(which = 'both') {
+  if (which !== 'out') inPt = null;
+  if (which !== 'in') outPt = null;
+  drawRange();
+}
 function drawRange() {
   const d = duration();
   const r = $('#range');
-  r.hidden = !d || (inPt == null && outPt == null);
-  if (r.hidden) return;
+  const any = d && (inPt != null || outPt != null);
+  r.hidden = !any;
+  $('#clearIO').hidden = !any;
+  $('#inMark').hidden = !(d && inPt != null);
+  $('#outMark').hidden = !(d && outPt != null);
+  if (!any) return;
   const a = (inPt ?? 0) / d, b = (outPt ?? d) / d;
   r.style.left = `${a * 100}%`; r.style.width = `${(b - a) * 100}%`;
+  $('#inMark').style.left = `${a * 100}%`;
+  $('#outMark').style.left = `${b * 100}%`;
 }
 function setLoop(on) { looping = on; $('#loop').classList.toggle('on', on); }
-function playRange() { if (!cur) return; shuttle = 1; showShuttle(); stopReverse(); v.playbackRate = 1; seek(inPt ?? 0, { play: true }); }
+function playRange() { if (!cur) return; shuttle = 1; showShuttle(); stopReverse(); v.playbackRate = S.speed; seek(inPt ?? 0, { play: true }); }
+
+// ---------- Chapters ----------
+const chapters = () => cur?.info?.chapters || [];
+function drawChapters() {
+  const d = duration();
+  $('#chaps').innerHTML = d ? chapters().filter((c) => c.start > 0.5).map((c) => `<i style="left:${(c.start / d) * 100}%" title="${esc(c.title)}"></i>`).join('') : '';
+}
+function chapterAt(tm) { let c = null; for (const x of chapters()) if (x.start <= tm) c = x; return c; }
+function chapterStep(n) {
+  const cs = chapters(); if (!cs.length) return;
+  const tm = pos();
+  if (n > 0) { const nx = cs.find((c) => c.start > tm + 0.5); if (nx) seek(nx.start); }
+  else { const prev = [...cs].reverse().find((c) => c.start < tm - 2); seek(prev ? prev.start : 0); }
+}
 
 // ---------- The clock and the bar ----------
 const CLOCK_MODES = ['tc', 'time', 'frames'];
@@ -487,23 +569,27 @@ function clockText(tm) {
   const drop = isDrop(f, base);
   return framesToTc(tcToFrames(base, f, drop) + Math.max(0, frameOf(tm)), f, drop);
 }
+const EL_tc = $('#tc'), EL_done = $('#done'), EL_head = $('#head'), EL_buf = $('#buf'), EL_len = $('#len'), EL_bzTc = $('#bzTc');
+let lastClock = '';
 function paint(force) {
   const d = duration();
   const tm = force ?? (hasPicture() || (v.paused && !rev) ? shownTime : pos());
-  $('#tc').textContent = cur ? clockText(tm) : clockText(0);
+  const text = cur ? clockText(tm) : clockText(0);
+  if (text !== lastClock) { lastClock = text; EL_tc.textContent = text; if (document.body.classList.contains('compact')) EL_bzTc.textContent = text; }
   const pct = d ? Math.min(1, tm / d) : 0;
-  $('#done').style.width = `${pct * 100}%`;
-  $('#head').style.left = `${pct * 100}%`;
+  EL_done.style.width = `${pct * 100}%`;
+  EL_head.style.left = `${pct * 100}%`;
   // what has arrived, from the playhead on
   if (cur && d && v.buffered.length) {
     let end = 0;
     for (let i = 0; i < v.buffered.length; i++) end = Math.max(end, v.buffered.end(i));
-    $('#buf').style.width = `${Math.min(1, end / d) * 100}%`;
-  } else $('#buf').style.width = '0';
+    EL_buf.style.width = `${Math.min(1, end / d) * 100}%`;
+  } else EL_buf.style.width = '0';
   // the loop and the out point
   if (cur && !v.paused && outPt != null && tm >= outPt) {
     if (looping) seek(inPt ?? 0); else { v.pause(); seek(outPt); }
   }
+  paintSubs(tm);
 }
 function lenText() {
   if (!cur) return '';
@@ -513,10 +599,10 @@ function lenText() {
 function frameLoop() {
   if (cur && !v.paused && !hasPicture()) shownTime = pos();
   paint();
-  $('#len').textContent = lenText();
   requestAnimationFrame(frameLoop);
 }
 requestAnimationFrame(frameLoop);
+setInterval(() => { EL_len.textContent = lenText(); }, 500);
 // the exact frame on screen, so a step goes from there
 function watchFrames() {
   v.requestVideoFrameCallback((_n, m) => { if (cur) shownTime = m.mediaTime; watchFrames(); });
@@ -527,17 +613,43 @@ v.addEventListener('timeupdate', () => { if (!hasPicture() && cur) shownTime = p
 const bar = $('#bar');
 const barTime = (e) => { const r = bar.getBoundingClientRect(); return Math.max(0, Math.min(1, (e.clientX - r.left) / r.width)) * duration(); };
 let scrubbing = false;
-bar.addEventListener('pointerdown', (e) => { if (!cur) return; scrubbing = true; bar.setPointerCapture(e.pointerId); if (shuttle < 0) setShuttle(0); seek(barTime(e)); });
+bar.addEventListener('pointerdown', (e) => { if (!cur || e.target.classList.contains('mark')) return; scrubbing = true; bar.setPointerCapture(e.pointerId); if (shuttle < 0) setShuttle(0); seek(barTime(e)); });
 bar.addEventListener('pointermove', (e) => {
   if (!cur) return;
-  const tip = $('#tip'); const tm = barTime(e);
-  tip.hidden = false; tip.textContent = clockText(tm);
+  const tm = barTime(e);
+  const tip = $('#tip');
+  tip.hidden = false;
+  const ch = chapterAt(tm);
+  $('#tipText').textContent = clockText(tm) + (ch?.title ? ` · ${ch.title}` : '');
   tip.style.left = `${(tm / (duration() || 1)) * 100}%`;
-  if (scrubbing) seek(tm);
+  if (scrubbing) seek(tm); else showThumb(tm);
 });
 bar.addEventListener('pointerup', () => { scrubbing = false; });
 bar.addEventListener('pointerleave', () => { $('#tip').hidden = true; });
+$('#inMark').addEventListener('click', (e) => { e.stopPropagation(); clearMarks('in'); });
+$('#outMark').addEventListener('click', (e) => { e.stopPropagation(); clearMarks('out'); });
 $('#tc').addEventListener('click', () => { S.clockMode = CLOCK_MODES[(CLOCK_MODES.indexOf(S.clockMode) + 1) % 3]; save(); placeLenses(); });
+
+// a small frame under the mouse on the bar, one a second, kept while the file is open
+const thumbs = new Map();
+let thumbTimer = 0, thumbWant = -1;
+function showThumb(tm) {
+  const img = $('#tipImg');
+  if (!hasPicture() || !cur) { img.hidden = true; return; }
+  const key = Math.floor(tm);
+  if (thumbs.has(key)) { const src = thumbs.get(key); if (src) { img.src = src; img.hidden = false; } return; }
+  thumbWant = key;
+  clearTimeout(thumbTimer);
+  thumbTimer = setTimeout(async () => {
+    if (!cur || thumbs.has(key)) return;
+    thumbs.set(key, null);
+    const item = cur.item;
+    const src = await window.api.thumb({ file: item.file, at: key + 0.5, info: cur.info });
+    if (cur?.item !== item) return;
+    thumbs.set(key, src);
+    if (src && thumbWant === key && !$('#tip').hidden) { img.src = src; img.hidden = false; }
+  }, 120);
+}
 
 // the sound's shape behind the bar
 let wave = null;
@@ -558,10 +670,203 @@ function drawWave() {
     g.fillRect(x, mid - h, dpr * 1.2, h * 2);
   }
 }
-setInterval(() => { if (document.body.classList.contains('audio')) drawWave(); }, 120);
-window.addEventListener('resize', drawWave);
+setInterval(() => { if (document.body.classList.contains('audio') && !v.paused) drawWave(); }, 150);
+window.addEventListener('resize', () => { drawWave(); placeMask(); placeLenses(); });
 
-// ---------- Volume, full screen ----------
+// ---------- Subtitles: the file's tracks, files beside it, a chosen file; drawn by the page ----------
+let subChoices = []; // { kind: 'track'|'file', n?, file?, label }
+async function loadSubtitles(token) {
+  subChoices = [];
+  if (!cur || !hasPicture()) { drawSubsList(); paintSubs(0); return; }
+  for (const s of cur.info.subs || []) subChoices.push({ kind: 'track', n: s.n, bitmap: s.bitmap, label: [s.lang?.toUpperCase(), s.title, s.codec].filter(Boolean).join(' · ') || `#${s.n + 1}`, where: t('in the file') });
+  const beside = await window.api.subFiles(cur.item.file).catch(() => []);
+  if (token !== loadToken) return;
+  for (const f of beside) subChoices.push({ kind: 'file', file: f.file, label: f.name, where: f.lang?.toUpperCase() || '' });
+  drawSubsList();
+  // the first track, or the first file beside, by itself
+  const first = subChoices.find((c) => !c.bitmap);
+  if (first && S.subOn) chooseSubs(first); else { cur.subs = null; paintSubs(0); }
+}
+async function chooseSubs(choice) {
+  if (!cur) return;
+  const token = loadToken;
+  cur.subTrack = choice;
+  cur.subs = null;
+  drawSubsList();
+  if (!choice) { paintSubs(0); return; }
+  const r = await window.api.subtitles({ file: cur.item.file, track: choice.kind === 'track' ? choice.n : null, subFile: choice.kind === 'file' ? choice.file : null });
+  if (token !== loadToken || cur.subTrack !== choice) return;
+  if (!r.ok) { toast(esc(t('Could not read the subtitles')) + `: ${esc(r.error)}`); cur.subTrack = null; drawSubsList(); return; }
+  cur.subs = parseVtt(r.vtt);
+  S.subOn = true; save();
+  $('#subsBtn').classList.add('lit');
+}
+// WebVTT -> cues, with the basic marks (i, b, u) kept and everything else as text
+function parseVtt(text) {
+  const cues = [];
+  const tm = (s) => { const m = /(?:(\d+):)?(\d+):(\d+)[.,](\d+)/.exec(s); return m ? (+(m[1] || 0)) * 3600 + +m[2] * 60 + +m[3] + +m[4] / 1000 : 0; };
+  for (const block of text.replace(/\r/g, '').split(/\n\n+/)) {
+    const lines = block.split('\n');
+    const i = lines.findIndex((l) => l.includes('-->'));
+    if (i < 0) continue;
+    const [a, b] = lines[i].split('-->');
+    const html = lines.slice(i + 1).join('\n').replace(/<\/?(?:v|c|lang|ruby|rt)[^>]*>/g, '').replace(/<(\/?)(i|b|u)[^>]*>/g, '<$1$2>').replace(/<[^>]*>/g, (x) => (/^<\/?(i|b|u)>$/.test(x) ? x : ''));
+    cues.push({ start: tm(a), end: tm(b), html: html.trim() });
+  }
+  return cues;
+}
+let lastSubKey = '';
+function paintSubs(tm) {
+  const box = $('#subs');
+  if (!cur?.subs || !S.subOn) { if (lastSubKey) { lastSubKey = ''; box.hidden = true; box.innerHTML = ''; } return; }
+  const at = tm - S.subDelay;
+  const on = cur.subs.filter((c) => at >= c.start && at < c.end);
+  const key = on.map((c) => c.start).join(',');
+  if (key === lastSubKey) return;
+  lastSubKey = key;
+  box.hidden = !on.length;
+  box.innerHTML = on.map((c) => `<span>${c.html.split('\n').map((l) => l).join('<br>')}</span>`).join('');
+}
+function drawSubsList() {
+  const box = $('#subsList');
+  if (!cur || !hasPicture()) { box.innerHTML = `<div class="none">${esc(t('None in the file or beside it.'))}</div>`; return; }
+  const off = `<button data-sub="off" class="${!cur.subTrack || !S.subOn ? 'on' : ''}">${esc(t('Off'))}</button>`;
+  const rows = subChoices.map((c, i) => `<button data-sub="${i}" class="${cur.subTrack === c && S.subOn ? 'on' : ''}" ${c.bitmap ? 'disabled' : ''}>${esc(c.label)}<small>${esc(c.bitmap ? t('bitmap, cannot be shown') : c.where)}</small></button>`).join('');
+  box.innerHTML = off + rows + (subChoices.length ? '' : `<div class="none">${esc(t('None in the file or beside it.'))}</div>`);
+  $('#subsBtn').classList.toggle('lit', !!(cur.subTrack && S.subOn));
+  $('#subDelay').textContent = `${S.subDelay >= 0 ? '+' : ''}${S.subDelay.toFixed(1)} s`;
+}
+$('#subsList').addEventListener('click', (e) => {
+  const b = e.target.closest('button[data-sub]'); if (!b || !cur) return;
+  if (b.dataset.sub === 'off') { S.subOn = false; save(); drawSubsList(); paintSubs(0); return; }
+  S.subOn = true; save(); chooseSubs(subChoices[+b.dataset.sub]);
+});
+$('#subsFile').addEventListener('click', async () => {
+  const f = await window.api.pickSub(S.lang); if (!f || !cur) return;
+  const c = { kind: 'file', file: f, label: f.split(/[\\/]/).pop(), where: '' };
+  subChoices.push(c); chooseSubs(c);
+});
+$('#subEarlier').addEventListener('click', () => { S.subDelay = +(S.subDelay - 0.5).toFixed(1); save(); drawSubsList(); lastSubKey = ''; });
+$('#subLater').addEventListener('click', () => { S.subDelay = +(S.subDelay + 0.5).toFixed(1); save(); drawSubsList(); lastSubKey = ''; });
+function toggleSubs() { if (!cur?.subs && subChoices.length) return chooseSubs(subChoices.find((c) => !c.bitmap)); S.subOn = !S.subOn; save(); drawSubsList(); lastSubKey = ''; }
+function applySubSize() { document.body.classList.toggle('sub-s', S.subSize === 's'); document.body.classList.toggle('sub-l', S.subSize === 'l'); }
+
+// ---------- The picture: frame, aspect, zoom, turn, look; the window's shape ----------
+function applyPicture() {
+  v.style.objectFit = S.fitMode;
+  const tf = [`rotate(${S.rot}deg)`, `scale(${(S.flipH ? -1 : 1) * S.zoom}, ${(S.flipV ? -1 : 1) * S.zoom})`];
+  v.style.transform = tf.join(' ');
+  v.style.filter = S.brightness !== 1 || S.contrast !== 1 || S.saturation !== 1 ? `brightness(${S.brightness}) contrast(${S.contrast}) saturate(${S.saturation})` : '';
+  for (const k of ['brightness', 'contrast', 'saturation']) { const el = $('#' + k); el.value = S[k]; el.style.setProperty('--p', `${((S[k] - el.min) / (el.max - el.min)) * 100}%`); }
+  $('#pictureBtn').classList.toggle('lit', S.fitMode !== 'contain' || +S.aspect !== 0 || S.zoom !== 1 || S.rot !== 0 || S.flipH || S.flipV || !!v.style.filter);
+  placeMask();
+  placeLenses();
+}
+// the aspect mask: dark bands over what falls outside the chosen frame, on the picture as it is shown
+function placeMask() {
+  const m = $('#mask');
+  const ratio = +S.aspect;
+  if (!ratio || !cur || !hasPicture() || !v.videoWidth) { m.hidden = true; return; }
+  const box = $('#pic').getBoundingClientRect();
+  const vr = v.videoWidth / v.videoHeight;
+  // where the picture sits inside the box (Fit): the mask is cut from that
+  let pw = box.width, ph = box.height;
+  if (S.fitMode === 'contain') { if (pw / ph > vr) pw = ph * vr; else ph = pw / vr; }
+  let mw = pw, mh = ph;
+  if (mw / mh > ratio) mw = mh * ratio; else mh = mw / ratio;
+  m.hidden = false;
+  m.style.width = `${mw}px`; m.style.height = `${mh}px`;
+  m.style.left = `${(box.width - mw) / 2}px`; m.style.top = `${(box.height - mh) / 2}px`;
+}
+// the window takes the picture's shape (Alex, 31 Oct): the picture's ratio, plus what sits around the picture
+function fitWindow(resize) {
+  if (!S.followPic || !cur || !hasPicture() || !v.videoWidth || document.fullscreenElement) { window.api.fit({ ratio: 0 }); return; }
+  const box = $('#pic').getBoundingClientRect();
+  const extra = { width: window.innerWidth - box.width, height: window.innerHeight - box.height };
+  let ratio = v.videoWidth / v.videoHeight;
+  if (S.rot % 180) ratio = 1 / ratio;
+  window.api.fit({ ratio, extra, resize });
+}
+v.addEventListener('loadedmetadata', () => { if (cur && hasPicture()) setTimeout(() => fitWindow(true), 50); });
+function resetPicture() { Object.assign(S, { fitMode: 'contain', aspect: 0, zoom: 1, rot: 0, flipH: false, flipV: false, brightness: 1, contrast: 1, saturation: 1 }); save(); applyPicture(); fitWindow(false); }
+$('#pictureReset').addEventListener('click', resetPicture);
+for (const k of ['brightness', 'contrast', 'saturation']) $('#' + k).addEventListener('input', (e) => { S[k] = +e.target.value; save(); applyPicture(); });
+$('#followPic').addEventListener('input', (e) => { S.followPic = e.target.checked; $('#followPic2').checked = S.followPic; save(); fitWindow(true); });
+$('#followPic2').addEventListener('input', (e) => { S.followPic = e.target.checked; $('#followPic').checked = S.followPic; save(); fitWindow(true); });
+$('#onTop').addEventListener('input', (e) => { S.onTop = e.target.checked; save(); window.api.onTop(S.onTop); $('#bzTop').classList.toggle('on', S.onTop); });
+
+// ---------- Sound: tracks, what you hear, delay, output, equalizer (Web Audio) ----------
+const EQ_HZ = [31, 62, 125, 250, 500, 1000, 2000, 4000, 8000, 16000];
+const EQ_PRESETS = { flat: [0, 0, 0, 0, 0, 0, 0, 0, 0, 0], voice: [-3, -2, 0, 2, 4, 4, 3, 1, 0, -1], bass: [6, 5, 3, 1, 0, 0, 0, 0, 0, 0], bright: [0, 0, 0, 0, 0, 1, 2, 4, 5, 5] };
+let audio = null; // { ctx, src, splitter, merger, gains: [L->L, L->R, R->L, R->R], delay, eq: [], out }
+function audioStart() {
+  if (audio) { audio.ctx.resume().catch(() => {}); return; }
+  try {
+    const ctx = new AudioContext({ latencyHint: 'playback' });
+    const src = ctx.createMediaElementSource(v);
+    const splitter = ctx.createChannelSplitter(2);
+    const merger = ctx.createChannelMerger(2);
+    const gains = [0, 1, 2, 3].map(() => ctx.createGain());
+    // left in -> gains 0 (to left) and 1 (to right); right in -> gains 2 (to left) and 3 (to right)
+    splitter.connect(gains[0], 0); splitter.connect(gains[1], 0); splitter.connect(gains[2], 1); splitter.connect(gains[3], 1);
+    gains[0].connect(merger, 0, 0); gains[1].connect(merger, 0, 1); gains[2].connect(merger, 0, 0); gains[3].connect(merger, 0, 1);
+    const delay = ctx.createDelay(2);
+    const eq = EQ_HZ.map((hz, i) => { const f = ctx.createBiquadFilter(); f.type = i === 0 ? 'lowshelf' : i === EQ_HZ.length - 1 ? 'highshelf' : 'peaking'; f.frequency.value = hz; f.Q.value = 1.1; return f; });
+    src.connect(splitter); merger.connect(delay);
+    let last = delay; for (const f of eq) { last.connect(f); last = f; }
+    last.connect(ctx.destination);
+    audio = { ctx, src, splitter, merger, gains, delay, eq };
+    applyAudio();
+  } catch (e) { console.warn('audio graph', e); }
+}
+function applyAudio() {
+  if (audio) {
+    const g = { stereo: [1, 0, 0, 1], left: [1, 1, 0, 0], right: [0, 0, 1, 1], mono: [0.5, 0.5, 0.5, 0.5], swap: [0, 1, 1, 0] }[S.chan] || [1, 0, 0, 1];
+    audio.gains.forEach((n, i) => { n.gain.value = g[i]; });
+    audio.delay.delayTime.value = Math.max(0, S.audDelay) / 1000;
+    audio.eq.forEach((f, i) => { f.gain.value = S.eq[i] || 0; });
+    if (S.outDevice && audio.ctx.setSinkId) audio.ctx.setSinkId(S.outDevice).catch(() => {});
+    else if (!S.outDevice && audio.ctx.setSinkId) audio.ctx.setSinkId('').catch(() => {});
+  }
+  $('#audDelay').textContent = `${S.audDelay} ms`;
+  $('#audioBtn').classList.toggle('lit', S.chan !== 'stereo' || S.audDelay !== 0 || S.eq.some((x) => x) || !!S.outDevice);
+  $$('#eq input').forEach((el, i) => { el.value = S.eq[i] || 0; });
+  placeLenses();
+}
+$('#eq').innerHTML = EQ_HZ.map((hz, i) => `<label><input type="range" min="-12" max="12" step="1" data-band="${i}" aria-label="${hz} Hz"><small>${hz >= 1000 ? `${hz / 1000}k` : hz}</small></label>`).join('');
+$('#eq').addEventListener('input', (e) => { const b = e.target.dataset.band; if (b == null) return; S.eq[+b] = +e.target.value; save(); applyAudio(); });
+$('#eqPresets').addEventListener('click', (e) => { const b = e.target.closest('button[data-v]'); if (!b) return; S.eq = [...EQ_PRESETS[b.dataset.v]]; save(); applyAudio(); });
+$('#audEarlier').addEventListener('click', () => { S.audDelay = Math.max(0, S.audDelay - 50); save(); applyAudio(); });
+$('#audLater').addEventListener('click', () => { S.audDelay = Math.min(2000, S.audDelay + 50); save(); applyAudio(); });
+async function drawDevices() {
+  const sel = $('#outDevice');
+  let list = [];
+  try { list = (await navigator.mediaDevices.enumerateDevices()).filter((d) => d.kind === 'audiooutput'); } catch {}
+  sel.innerHTML = `<option value="">${esc(t('System default'))}</option>` + list.filter((d) => d.deviceId && d.deviceId !== 'default').map((d) => `<option value="${esc(d.deviceId)}">${esc(d.label || d.deviceId.slice(0, 8))}</option>`).join('');
+  sel.value = list.some((d) => d.deviceId === S.outDevice) ? S.outDevice : '';
+}
+$('#outDevice').addEventListener('change', (e) => { S.outDevice = e.target.value; save(); applyAudio(); });
+navigator.mediaDevices?.addEventListener?.('devicechange', drawDevices);
+function drawTracks() {
+  const box = $('#tracksList');
+  const a = cur?.info?.audio || [];
+  if (a.length < 2) { box.innerHTML = ''; box.hidden = true; return; }
+  box.hidden = false;
+  box.innerHTML = a.map((x, n) => `<button data-track="${n}" class="${n === cur.track ? 'on' : ''}">${esc(t('Sound track {n}', { n: n + 1 }))}<small>${esc([x.lang.toUpperCase(), x.codec.toUpperCase(), x.channels].filter(Boolean).join(' · '))}</small></button>`).join('');
+}
+function chooseTrack(track) {
+  if (!cur || track === cur.track) return;
+  // another sound track: the window plays only the first, so the file comes through ffmpeg from here
+  const at = pos(), playing = !v.paused;
+  cur.track = track;
+  if (cur.mode === 'native') cur.mode = cur.info.video ? (['h264', 'hevc', 'vp9', 'av1'].includes(cur.info.video.codec) ? 'remux' : 'transcode') : 'audio';
+  drawFacts(); drawTracks();
+  startAt(at, playing);
+}
+$('#tracksList').addEventListener('click', (e) => { const b = e.target.closest('button[data-track]'); if (b) chooseTrack(+b.dataset.track); });
+$('#facts').addEventListener('click', (e) => { const b = e.target.closest('button[data-track]'); if (b) chooseTrack(+b.dataset.track); });
+
+// ---------- Volume, full screen, picture in picture, the bezel ----------
 function setVolume(x) {
   S.volume = Math.max(0, Math.min(1, x)); v.volume = S.volume; $('#volume').value = S.volume;
   $('#volume').style.setProperty('--p', `${S.volume * 100}%`); save();
@@ -570,66 +875,105 @@ function setMuted(m) { S.muted = m; v.muted = m; setBody('muted', m); save(); }
 $('#volume').addEventListener('input', (e) => { setVolume(+e.target.value); if (S.muted) setMuted(false); });
 $('#mute').addEventListener('click', () => setMuted(!S.muted));
 function toggleFull() { if (document.fullscreenElement) document.exitFullscreen(); else $('#stage').requestFullscreen().catch(() => {}); }
+document.addEventListener('fullscreenchange', () => { setTimeout(() => { placeMask(); fitWindow(false); }, 100); });
+function togglePip() { if (!cur || !hasPicture()) return; if (document.pictureInPictureElement) document.exitPictureInPicture(); else v.requestPictureInPicture().catch(() => {}); }
 let idleTimer = 0;
 document.addEventListener('mousemove', () => {
-  $('#stage').classList.remove('idle');
+  $('#stage').classList.remove('idle'); document.body.classList.remove('idle'); document.body.classList.add('show-bar');
   clearTimeout(idleTimer);
-  idleTimer = setTimeout(() => { if (document.fullscreenElement && !v.paused) $('#stage').classList.add('idle'); }, 2500);
+  idleTimer = setTimeout(() => {
+    if (document.fullscreenElement && !v.paused) $('#stage').classList.add('idle');
+    if (document.body.classList.contains('compact')) { document.body.classList.remove('show-bar'); if (!v.paused) document.body.classList.add('idle'); }
+  }, 2200);
 });
+// the small bezel: only the picture inside a thin frame, the controls when the mouse comes
+let compactBefore = null;
+function setCompact(on) {
+  const was = document.body.classList.contains('compact');
+  if (on === was) return;
+  if (on) { compactBefore = { side: S.side }; S.side = false; }
+  else if (compactBefore) { S.side = compactBefore.side; compactBefore = null; }
+  setBody('compact', on);
+  document.body.classList.toggle('show-bar', on);
+  $('#bezelBar').hidden = !on;
+  closePops();
+  window.api.compact(on);
+  showSide();
+  setTimeout(() => { placeMask(); fitWindow(true); EL_bzTc.textContent = lastClock; }, 60);
+}
+$('#bzPlay').addEventListener('click', togglePlay);
+$('#bzBack').addEventListener('click', () => setCompact(false));
+$('#bzTop').addEventListener('click', () => { S.onTop = !S.onTop; save(); $('#onTop').checked = S.onTop; window.api.onTop(S.onTop); $('#bzTop').classList.toggle('on', S.onTop); });
 
-// ---------- The snapshot: the frame on screen, at full size, as PNG beside the file ----------
+// ---------- The snapshot: the frame on screen, at full size, as a picture ----------
 async function snapshot() {
   if (!cur || !hasPicture()) return;
   const label = clockText(shownTime).replace(/[:;]/g, '-');
-  const r = await window.api.snapshot({ file: cur.item.file, at: shownTime - 0.25 / fps(), label });
+  const r = await window.api.snapshot({ file: cur.item.file, at: shownTime - 0.25 / fps(), label, info: cur.info, format: S.snapFormat, where: S.snapWhere, folder: S.snapDir });
   if (!r.ok) return toast(esc(t('The frame could not be saved')) + (r.error ? `: ${esc(r.error)}` : ''));
   const name = r.out.split(/[\\/]/).pop();
   toast(`${esc(t('Saved {name}', { name }))} · <a id="showSnap">${esc(t('Show'))}</a>`);
   $('#showSnap')?.addEventListener('click', () => window.api.reveal(r.out));
 }
+function showSnapDir() { $('#snapDirText').textContent = S.snapWhere === 'folder' ? S.snapDir : ''; }
 
-// ---------- The facts ----------
+// ---------- The facts: everything the file says ----------
 function drawFacts() {
   const box = $('#facts');
   if (!cur) { box.innerHTML = `<div class="empty">${esc(t('Nothing open yet.'))}</div>`; return; }
-  const i = cur.info, q = cur.item, vi = i.video;
+  const i = cur.info, q = cur.item, vi = i.video, d = i.detail || { format: { tags: {} }, streams: [], chapters: [] };
   const HOW = { native: 'Plays as it is', remux: 'Sound made AAC while it plays', transcode: 'Picture made H.264 while it plays', audio: 'Sound made FLAC while it plays' };
-  const f = (k, val) => (val ? `<div class="f"><span>${esc(t(k))}</span><b>${esc(val)}</b></div>` : '');
+  const f = (k, val, wide = false) => (val ? `<div class="f ${wide ? 'wide' : ''}"><span>${esc(t(k))}</span><b>${esc(val)}</b></div>` : '');
+  const tags = (o) => Object.entries(o || {}).map(([k, val]) => `<div class="f ${val.length > 28 ? 'wide' : ''}"><span>${esc(k)}</span><b>${esc(val)}</b></div>`).join('');
   const dir = q.file.slice(0, q.file.length - q.name.length - 1);
   let html = `<div class="fname">${esc(q.name)}</div><div class="where">${esc(dir)}</div>`;
   if (cur.plan.mode !== 'none') html += `<span class="chip how ${cur.mode}"><i></i>${esc(t(HOW[cur.mode]))}</span>`;
-  html += `<div class="box"><h4>${esc(t('File'))}</h4>${f('Title', i.title)}${f('Size', fmtSize(q.size))}${f('Wrapper', i.container.split(',')[0].toUpperCase())}${f('Length', i.duration ? fmtTime(i.duration) : '')}${f('Bitrate', fmtRate(i.bitrate))}${f('Timecode', i.timecode)}${f('Subtitles', i.subtitles ? String(i.subtitles) : '')}</div>`;
-  if (vi) {
-    html += `<div class="box"><h4>${esc(t('Picture'))}</h4>${f('Codec', [vi.codec.toUpperCase(), vi.profile].filter(Boolean).join(' '))}${f('Frame', vi.width ? `${vi.width} × ${vi.height}` : '')}
-      ${f('Rate', vi.fps ? `${+vi.fps.toFixed(3)} fps` : '')}${f('Colour', [vi.pixfmt, vi.interlaced ? t('interlaced') : ''].filter(Boolean).join(' · '))}${f('Bitrate', fmtRate(vi.bitrate))}</div>`;
-  }
-  if (i.audio.length) {
-    const a = i.audio[cur.track] || i.audio[0];
-    html += `<div class="box"><h4>${esc(t('Sound'))}</h4>${f('Codec', [a.codec.toUpperCase(), a.profile].filter(Boolean).join(' '))}${f('Rate', [a.sampleRate ? `${a.sampleRate / 1000} kHz` : '', a.bits ? `${a.bits}-bit` : ''].filter(Boolean).join(' · '))}
-      ${f('Sound', a.channels)}${f('Bitrate', fmtRate(a.bitrate))}`;
-    if (i.audio.length > 1) {
-      html += `<div class="tracks">${i.audio.map((x, n) => `<button data-track="${n}" class="${n === cur.track ? 'on' : ''}">${esc(t('Sound track {n}', { n: n + 1 }))} · ${esc([x.lang.toUpperCase(), x.codec.toUpperCase(), x.channels].filter(Boolean).join(' · '))}</button>`).join('')}</div>`;
-    }
+  // the file
+  html += `<div class="box"><h4>${esc(t('File'))}</h4>${f('Title', i.title)}${f('Size', fmtSize(q.size || i.file?.size))}${f('Wrapper', d.format.name || i.container)}${f('Length', i.duration ? fmtTime(i.duration) : '')}${f('Starts at', d.format.start && +d.format.start ? `${d.format.start} s` : '')}${f('Bitrate', fmtRate(i.bitrate))}${f('Timecode', i.timecode)}
+    ${f('Created', fmtDate(i.file?.created))}${f('Modified', fmtDate(i.file?.modified))}${i.sequence ? f('Sequence', t('{n} frames from {s}, at {f} fps', { n: i.sequence.count, s: i.sequence.start, f: i.sequence.fps })) : ''}${tags(d.format.tags)}</div>`;
+  // every stream, in order, with its own facts and tags
+  for (const s of d.streams) {
+    const kind = { Video: 'Video stream', Audio: 'Sound stream', Subtitle: 'Subtitle stream', Data: 'Data stream', Attachment: 'Attachment' }[s.type] || 'Stream';
+    let rows = '';
+    const p = s.parts || [];
+    if (s.type === 'Video') {
+      const col = /^([\w]+)(?:\(([^)]*)\))?/.exec(p[1] || '') || [];
+      const cs = (col[2] || '').split(',').map((x) => x.trim());
+      const size = /(\d+)x(\d+)/.exec(p.find((x) => /^\d+x\d+/.test(x)) || '');
+      const sar = /SAR ([\d:.]+) DAR ([\d:.]+)/.exec(s.line) || [];
+      rows += f('Codec', p[0]) + f('Pixel format', col[1]) + (size ? f('Frame', `${size[1]} × ${size[2]}`) : '') + f('Pixel aspect', sar[1]) + f('Display aspect', sar[2]);
+      const named = cs.filter((x) => x && !/^(tv|pc|progressive|top first|bottom first|top coded first|bottom coded first)$/.test(x))[0] || '';
+      const parts3 = named.split('/');
+      rows += f('Range', cs.find((x) => /^(tv|pc)$/.test(x)) === 'pc' ? 'full (pc)' : cs.includes('tv') ? 'limited (tv)' : '');
+      if (parts3.length === 3) rows += f('Primaries', parts3[1]) + f('Transfer', parts3[2]) + f('Matrix', parts3[0]); else if (named) rows += f('Colour', named);
+      rows += f('interlaced', cs.find((x) => /first/.test(x)) ? cs.find((x) => /first/.test(x)) : '');
+      rows += f('Bitrate', (p.find((x) => /kb\/s$/.test(x)) || '')) + f('Rate', (p.find((x) => / fps$/.test(x)) || '')) + f('Frame rate (tbr)', (p.find((x) => / tbr$/.test(x)) || '')) + f('Time base', (p.find((x) => / tbn$/.test(x)) || ''));
+    } else if (s.type === 'Audio') {
+      rows += f('Codec', p[0]) + f('Rate', p[1]) + f('Sound', p[2]) + f('Sample format', p[3]) + f('Bitrate', p.find((x) => /kb\/s$/.test(x)) || '');
+    } else rows += f('Codec', s.line, true);
+    rows += f('Flags', s.flags?.join(', ')) + tags(s.tags) + (s.side?.length ? f('Side data', s.side.join('\n'), true) : '');
+    html += `<div class="box"><h4>${esc(t(kind))}<small>#${s.index}${s.lang && s.lang !== 'und' ? ` · ${s.lang.toUpperCase()}` : ''}${s.id ? ` · ${s.id}` : ''}</small></h4>${rows}`;
+    if (s.type === 'Audio' && i.audio.length > 1) { const n = i.audio.findIndex((a) => a.index === s.index); if (n >= 0) html += `<div class="tracks"><button data-track="${n}" class="${n === cur.track ? 'on' : ''}">${esc(t('Sound track {n}', { n: n + 1 }))}</button></div>`; }
     html += '</div>';
   }
+  if (d.chapters.length) html += `<div class="box"><h4>${esc(t('Chapters'))}</h4>${d.chapters.map((c, n) => f(c.tags.title || t('Chapter {n}', { n: n + 1 }), `${fmtClock(c.start)} – ${fmtClock(c.end)}`)).join('')}</div>`;
+  html += `<details><summary>${esc(t('Everything ffmpeg says'))}</summary><pre>${esc(i.raw || '')}</pre></details>`;
   box.innerHTML = html;
 }
-$('#facts').addEventListener('click', (e) => {
-  const b = e.target.closest('button[data-track]');
-  if (!b || !cur) return;
-  const track = +b.dataset.track;
-  if (track === cur.track) return;
-  // another sound track: the window plays only the first, so the file comes through ffmpeg from here
-  const at = pos(), playing = !v.paused;
-  cur.track = track;
-  if (cur.mode === 'native') cur.mode = cur.info.video ? (cur.plan.mode === 'native' && ['h264', 'hevc', 'vp9', 'av1'].includes(cur.info.video.codec) ? 'remux' : 'transcode') : 'audio';
-  drawFacts();
-  startAt(at, playing);
-});
+function factsText() {
+  if (!cur) return '';
+  return `${cur.item.file}\n\n${cur.info.raw || ''}`;
+}
+$('#copyInfo').addEventListener('click', () => { window.api.copy(factsText()); toast(esc(t('Copied'))); });
+$('#revealFile').addEventListener('click', () => { if (cur && !/^https?:/.test(cur.item.file)) window.api.reveal(cur.item.file); });
 
-// ---------- Next and previous ----------
+// ---------- Next and previous, shuffle ----------
 function next(n, auto = false) {
   if (!cur) return;
+  if (S.shuffle && auto && queue.length > 1) {
+    const others = queue.filter((q) => q !== cur.item && !q.bad);
+    if (others.length) return load(others[Math.floor(Math.random() * others.length)], { autoplay: true });
+  }
   let i = queue.indexOf(cur.item) + n;
   while (queue[i]?.bad && auto) i += n;
   if (queue[i]) load(queue[i], { autoplay: true });
@@ -644,35 +988,73 @@ function toast(html) {
   el.style.animation = 'none'; void el.offsetWidth; el.style.animation = '';
   clearTimeout(toastTimer); toastTimer = setTimeout(() => { el.hidden = true; }, 5000);
 }
+// the segmented choices: which one is on comes from S (or the side tab)
+const SEG_VAL = { sideTab: () => S.sideTab, fitMode: () => S.fitMode, playQuality: () => String(S.playQuality), seqFps: () => String(S.seqFps) };
 function placeLenses() {
   for (const seg of $$('.seg')) {
     const id = seg.id;
-    const val = id === 'sideTab' ? S.sideTab : S[id];
+    const val = SEG_VAL[id] ? SEG_VAL[id]() : String(S[id]);
     let lens = seg.querySelector('.lens');
     if (!lens) { lens = document.createElement('span'); lens.className = 'lens'; seg.prepend(lens); }
     let on = null;
     for (const b of seg.querySelectorAll('button')) { b.classList.toggle('on', b.dataset.v === val); if (b.dataset.v === val) on = b; }
     if (on && on.offsetWidth) { lens.style.left = `${on.offsetLeft}px`; lens.style.width = `${on.offsetWidth}px`; lens.hidden = false; } else lens.hidden = !on;
   }
+  for (const [id, key] of [['speedChips', 'speed'], ['aspectChips', 'aspect'], ['zoomChips', 'zoom'], ['chanChips', 'chan']]) {
+    for (const b of $(`#${id}`).querySelectorAll('button')) b.classList.toggle('on', +b.dataset.v === +S[key] || b.dataset.v === String(S[key]));
+  }
+  for (const b of $('#rotChips').querySelectorAll('button')) b.classList.toggle('on', b.dataset.v === 'flipH' ? S.flipH : b.dataset.v === 'flipV' ? S.flipV : +b.dataset.v === S.rot);
 }
 for (const seg of $$('.seg')) {
   seg.addEventListener('click', (e) => {
     const b = e.target.closest('button[data-v]');
     if (!b) return;
-    if (seg.id === 'sideTab') { S.sideTab = b.dataset.v; showSideTab(); }
-    else { S[seg.id] = b.dataset.v; if (seg.id === 'lang') { applyLang(); showUpdate(); } }
+    const val = b.dataset.v;
+    if (seg.id === 'sideTab') { S.sideTab = val; showSideTab(); }
+    else if (seg.id === 'fitMode') { S.fitMode = val; applyPicture(); }
+    else if (seg.id === 'playQuality') { S.playQuality = +val; if (cur?.mode === 'transcode') { const at = pos(), p = !v.paused; startAt(at, p); } }
+    else if (seg.id === 'seqFps') { S.seqFps = +val; }
+    else if (seg.id === 'subSize') { S.subSize = val; applySubSize(); }
+    else if (seg.id === 'snapWhere') { S.snapWhere = val; if (val === 'folder') window.api.pickFolder().then((f) => { if (f) S.snapDir = f; else S.snapWhere = 'beside'; save(); showSnapDir(); placeLenses(); }); showSnapDir(); }
+    else { S[seg.id] = val; if (seg.id === 'lang') { applyLang(); showUpdate(); } }
     save(); placeLenses();
   });
 }
+$('#speedChips').addEventListener('click', (e) => { const b = e.target.closest('button[data-v]'); if (b) setSpeed(+b.dataset.v); });
+$('#aspectChips').addEventListener('click', (e) => { const b = e.target.closest('button[data-v]'); if (b) { S.aspect = +b.dataset.v; save(); applyPicture(); } });
+$('#zoomChips').addEventListener('click', (e) => { const b = e.target.closest('button[data-v]'); if (b) { S.zoom = +b.dataset.v; save(); applyPicture(); } });
+$('#rotChips').addEventListener('click', (e) => {
+  const b = e.target.closest('button[data-v]'); if (!b) return;
+  if (b.dataset.v === 'flipH') S.flipH = !S.flipH; else if (b.dataset.v === 'flipV') S.flipV = !S.flipV; else S.rot = +b.dataset.v;
+  save(); applyPicture(); fitWindow(true);
+});
+$('#chanChips').addEventListener('click', (e) => { const b = e.target.closest('button[data-v]'); if (b) { S.chan = b.dataset.v; save(); applyAudio(); } });
+$('#keepPitch').addEventListener('input', (e) => { S.keepPitch = e.target.checked; v.preservesPitch = S.keepPitch; save(); });
+$('#resume').addEventListener('input', (e) => { S.resume = e.target.checked; save(); });
 function showSideTab() { $('#queueBox').hidden = S.sideTab !== 'queue'; $('#infoBox').hidden = S.sideTab !== 'info'; }
-function showSide() { setBody('no-side', !S.side); $('#toggleSide').classList.toggle('on', S.side); setTimeout(() => { drawWave(); placeLenses(); }, 0); }
+function showSide() { setBody('no-side', !S.side); $('#toggleSide').classList.toggle('on', S.side); setTimeout(() => { drawWave(); placeLenses(); placeMask(); fitWindow(false); }, 0); }
+
+// the popovers: one at a time; a click outside closes
+const POPS = { speedBtn: 'popSpeed', subsBtn: 'popSubs', pictureBtn: 'popPicture', audioBtn: 'popAudio' };
+function closePops() { for (const id of Object.values(POPS)) $('#' + id).hidden = true; for (const b of Object.keys(POPS)) $('#' + b).classList.remove('on'); }
+for (const [btn, pop] of Object.entries(POPS)) {
+  $('#' + btn).addEventListener('click', (e) => {
+    e.stopPropagation();
+    const open = $('#' + pop).hidden;
+    closePops();
+    if (open) { $('#' + pop).hidden = false; $('#' + btn).classList.add('on'); if (pop === 'popAudio') drawDevices(); placeLenses(); }
+  });
+  $('#' + pop).addEventListener('click', (e) => e.stopPropagation());
+}
+document.addEventListener('click', (e) => { if (!e.target.closest('.pop')) closePops(); });
 
 const KEYS = [
   ['Space', 'Play, pause'], ['J  K  L', 'Back, forward, faster each press; K stops'], ['K + J / L', 'Hold K with J or L: one frame'],
   ['← →', 'One frame back or forward'], ['Shift ← →', 'One second back or forward'], ['Home  End', 'Start, end'],
   ['I  O', 'Mark in, mark out'], ['Shift I  O', 'Go to in, go to out'], ['Alt X', 'Clear in and out'], ['/', 'Play from in to out'],
-  ['⌘/Ctrl L', 'Loop'], ['⌘/Ctrl ← →', 'Previous file, next file'], ['↑ ↓', 'Volume up, down'], ['M', 'Sound on or off'],
-  ['F', 'Full screen'], ['⌘/Ctrl Shift S', 'Save the frame as PNG'], ['⌘/Ctrl O', 'Open files'],
+  ['⌘/Ctrl L', 'Loop'], ['⌘/Ctrl ← →', 'Previous file, next file'], ['Page ↑ ↓', 'Previous chapter, next chapter'], ['↑ ↓', 'Volume up, down'], ['M', 'Sound on or off'],
+  ['[  ]', 'Slower, faster'], ['\\', 'Normal speed'], ['S', 'Subtitles on or off'], ['F', 'Full screen'], ['B', 'Small bezel'], ['P', 'Picture in picture'],
+  ['⌘/Ctrl Shift S', 'Save the frame as a picture'], ['⌘/Ctrl O', 'Open files'], ['⌘/Ctrl U', 'Open a web address'],
 ];
 function drawKeys() { $('#keysList').innerHTML = KEYS.map(([k, d]) => `<kbd>${esc(k)}</kbd><span>${esc(t(d))}</span>`).join(''); }
 
@@ -682,8 +1064,11 @@ document.addEventListener('keydown', (e) => {
   const mod = e.metaKey || e.ctrlKey;
   if (mod && e.key === ',') { e.preventDefault(); return setOpen($('#settings').hidden); }
   if (!$('#settings').hidden) { if (e.key === 'Escape') setOpen(false); return; }
+  if (!$('#urlVeil').hidden) { if (e.key === 'Escape') urlOpen(false); if (e.key === 'Enter') urlGo(); return; }
+  if (e.key === 'Escape') { closePops(); if (document.body.classList.contains('compact')) setCompact(false); return; }
   if (e.target.matches('input, select, textarea')) return;
   if (mod && e.key.toLowerCase() === 'o') { e.preventDefault(); return openPick(); }
+  if (mod && e.key.toLowerCase() === 'u') { e.preventDefault(); return urlOpen(true); }
   if (mod && e.shiftKey && e.key.toLowerCase() === 's') { e.preventDefault(); return snapshot(); }
   if (mod && e.key.toLowerCase() === 'l') { e.preventDefault(); return setLoop(!looping); }
   if (mod && e.key === 'ArrowRight') { e.preventDefault(); return next(1); }
@@ -698,14 +1083,22 @@ document.addEventListener('keydown', (e) => {
   if (e.key === 'ArrowRight') { e.preventDefault(); return e.shiftKey ? (v.pause(), seek(pos() + 1)) : step(1); }
   if (e.key === 'ArrowUp') { e.preventDefault(); return setVolume(S.volume + 0.05); }
   if (e.key === 'ArrowDown') { e.preventDefault(); return setVolume(S.volume - 0.05); }
+  if (e.key === 'PageUp') { e.preventDefault(); return chapterStep(-1); }
+  if (e.key === 'PageDown') { e.preventDefault(); return chapterStep(1); }
   if (e.key === 'Home') return seek(0);
   if (e.key === 'End') return seek(duration());
   if (k === 'i') return e.shiftKey ? inPt != null && seek(inPt) : mark('in');
   if (k === 'o') return e.shiftKey ? outPt != null && seek(outPt) : mark('out');
-  if (k === 'x' && e.altKey) { inPt = outPt = null; return drawRange(); }
+  if (k === 'x' && e.altKey) return clearMarks();
   if (e.key === '/') return playRange();
+  if (e.key === '[') return speedStep(-1);
+  if (e.key === ']') return speedStep(1);
+  if (e.key === '\\') return setSpeed(1);
   if (k === 'm') return setMuted(!S.muted);
+  if (k === 's') return toggleSubs();
   if (k === 'f') return toggleFull();
+  if (k === 'b') return setCompact(!document.body.classList.contains('compact'));
+  if (k === 'p') return togglePip();
 });
 document.addEventListener('keyup', (e) => { if (e.key.toLowerCase() === 'k') kDown = false; });
 
@@ -715,6 +1108,8 @@ $('#open').addEventListener('click', openPick);
 $('#browse').addEventListener('click', openPick);
 $('#addMore').addEventListener('click', async () => add(await window.api.pickFiles(S.lang), !cur));
 $('#clearQueue').addEventListener('click', () => { queue = queue.filter((q) => q === cur?.item); drawQueue(); });
+$('#shuffle').addEventListener('click', () => { S.shuffle = !S.shuffle; save(); drawQueue(); });
+$('#saveList').addEventListener('click', async () => { if (!queue.length) return; const p = await window.api.saveList({ files: queue.map((q) => q.file), lang: S.lang }); if (p) toast(esc(t('The list was saved'))); });
 $('#play').addEventListener('click', togglePlay);
 $('#rew').addEventListener('click', J);
 $('#fwd').addEventListener('click', L);
@@ -722,11 +1117,14 @@ $('#stepBack').addEventListener('click', () => step(-1));
 $('#stepFwd').addEventListener('click', () => step(1));
 $('#markIn').addEventListener('click', () => mark('in'));
 $('#markOut').addEventListener('click', () => mark('out'));
+$('#clearIO').addEventListener('click', () => clearMarks());
 $('#loop').addEventListener('click', () => setLoop(!looping));
 $('#snap').addEventListener('click', snapshot);
 $('#full').addEventListener('click', toggleFull);
-$('#toggleSide').addEventListener('click', () => { S.side = !S.side; save(); showSide(); });
-$('#screen').addEventListener('click', (e) => { if (cur && e.target === v) togglePlay(); });
+$('#pip').addEventListener('click', togglePip);
+$('#compact').addEventListener('click', () => setCompact(true));
+$('#toggleSide').addEventListener('click', () => { S.side = !S.side; save(); showSide(); setTimeout(() => fitWindow(true), 30); });
+$('#screen').addEventListener('click', (e) => { if (cur && (e.target === v || e.target.id === 'mask' || e.target.id === 'subs')) togglePlay(); });
 $('#screen').addEventListener('dblclick', (e) => { if (cur && e.target === v) toggleFull(); });
 $('#queue').addEventListener('click', (e) => {
   const x = e.target.closest('[data-x]');
@@ -739,6 +1137,20 @@ $('#queue').addEventListener('click', (e) => {
   const li = e.target.closest('li[data-i]');
   if (li) load(queue[+li.dataset.i], { autoplay: true });
 });
+// a web address
+function urlOpen(on) { $('#urlVeil').hidden = !on; if (on) { $('#urlField').value = ''; $('#urlField').focus(); } }
+function urlGo() { const u = $('#urlField').value.trim(); if (!/^https?:\/\//i.test(u)) return; urlOpen(false); add([u]); }
+$('#openUrl').addEventListener('click', () => urlOpen(true));
+$('#urlCancel').addEventListener('click', () => urlOpen(false));
+$('#urlGo').addEventListener('click', urlGo);
+$('#urlVeil').addEventListener('click', (e) => { if (e.target.id === 'urlVeil') urlOpen(false); });
+// Open with RoarPlay
+for (const [id, kind] of [['defaultVideo', 'video'], ['defaultAudio', 'audio']]) {
+  $('#' + id).addEventListener('click', async () => {
+    const r = await window.api.setDefault(kind);
+    $('#defaultsText').textContent = r.opened ? t('Pick RoarPlay in the window that opened.') : r.ok ? t('RoarPlay now opens {n} kinds of file.', { n: r.done }) : `${t('It could not be set')}: ${r.error || r.detail || ''}`;
+  });
+}
 
 // ---------- Drop anywhere ----------
 let dragDepth = 0;
@@ -748,6 +1160,8 @@ document.addEventListener('dragover', (e) => e.preventDefault());
 document.addEventListener('drop', (e) => {
   e.preventDefault(); dragDepth = 0; setBody('dragging', false);
   const paths = [...e.dataTransfer.files].map((f) => window.api.pathForFile(f)).filter(Boolean);
+  const text = e.dataTransfer.getData('text/uri-list') || e.dataTransfer.getData('text/plain');
+  if (!paths.length && /^https?:\/\/\S+$/i.test((text || '').trim())) return add([text.trim()]);
   add(paths);
 });
 window.api.onOpenFiles((list) => add(list));
@@ -791,7 +1205,21 @@ setBody('empty', true);
 $('#screen').classList.add('blank');
 setVolume(S.volume);
 setMuted(S.muted);
+v.preservesPitch = S.keepPitch;
+$('#keepPitch').checked = S.keepPitch;
+$('#resume').checked = S.resume;
+$('#followPic').checked = $('#followPic2').checked = S.followPic;
+$('#onTop').checked = S.onTop; if (S.onTop) window.api.onTop(true);
+$('#bzTop').classList.toggle('on', S.onTop);
+setSpeed(S.speed);
+applySubSize();
+applyPicture();
+applyAudio();
 showSide();
 showSideTab();
 applyLang();
+drawFacts();
+// the queue from last time, not playing by itself
+queue = fetchStore('queue', []).filter((q) => q && q.file);
+if (queue.length) { drawQueue(); probeQueue(); }
 window.addEventListener('resize', placeLenses);
