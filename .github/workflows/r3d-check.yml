@@ -1,0 +1,39 @@
+name: Check the RED R3D reader
+
+# When the reader or its build changes: the R3D SDK from the draft release sdk-r3d (never in the repository), the
+# parts of its headers the reader uses printed, and the reader built on Linux (the SDK ships Linux libraries too).
+on:
+  pull_request:
+    branches: [main]
+    paths: ['helper/r3d.cpp', 'scripts/r3d-build.sh', '.github/workflows/r3d-check.yml']
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  r3d:
+    runs-on: ubuntu-latest
+    env:
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Bring the SDK
+        run: |
+          gh release download sdk-r3d -R "$GITHUB_REPOSITORY" -D /tmp/r3dzip
+          cd /tmp && unzip -q r3dzip/*.zip && ls /tmp/R3DSDK*
+      - name: The headers the reader uses
+        run: |
+          I=$(ls -d /tmp/R3DSDK*/Include)
+          grep -n "InitializeSdk\|FinalizeSdk\|OPTION_RED_NONE\|enum InitializeStatus" -A2 "$I/R3DSDK.h" | head -40
+          grep -n "class Clip" -A3 "$I/R3DSDK.h" | head
+          grep -n "Width()\|Height()\|VideoAudioFramerate\|VideoFrameCount\|Timecode(\|AbsoluteTimecode\|MetadataExists\|MetadataItemAsString\|AudioChannelCount\|AudioSampleRate\|AudioSampleCount\|DecodeAudio(\|DecodeVideoFrame(\|GetDefaultImageProcessingSettings\|Status()" "$I/R3DSDK.h" | head -40
+          grep -n "PixelType_8Bit\|DECODE_FULL_RES_PREMIUM\|DECODE_HALF_RES_GOOD\|DECODE_QUARTER_RES_GOOD\|DECODE_EIGHT_RES_GOOD\|RMD_CAMERA_MODEL\b\|struct VideoDecodeJob\|class VideoDecodeJob" "$I"/*.h | head -30
+          sed -n '/^struct VideoDecodeJob/,/^};/p' "$I/R3DSDKDefinitions.h" | head -80
+          S=$(ls -d "/tmp/R3DSDK"*/"Sample code"); sed -n 1,200p "$S/Audio decode/ExtractAudioSample.cpp" | grep -v "^\s*//" | head -120
+      - name: Build the reader on Linux
+        run: |
+          D=$(ls -d /tmp/R3DSDK*)
+          g++ -std=c++17 -O2 -I "$D/Include" helper/r3d.cpp "$D/Lib/linux64/libR3DSDKPIC-cpp11.a" -ldl -lpthread -o /tmp/roarplay-r3d
+          cp "$D"/Redistributable/linux/*.so /tmp/
+          /tmp/roarplay-r3d info /nothing.R3D || echo "(no clip given: the error above is expected)"

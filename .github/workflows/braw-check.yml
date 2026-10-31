@@ -5,7 +5,7 @@ name: Check the Blackmagic RAW reader
 on:
   pull_request:
     branches: [main]
-    paths: ['helper/braw.cpp', 'scripts/braw-build.sh', '.github/workflows/braw-check.yml']
+    paths: ['helper/braw.cpp', 'scripts/braw-build.sh', '.github/workflows/braw-check.yml', 'package.json', 'scripts/adhoc-sign.js']
   workflow_dispatch:
 
 permissions:
@@ -23,3 +23,17 @@ jobs:
           node-version: 22
       - run: node scripts/fetch-ffmpeg.js darwin-arm64
       - run: FFMPEG=vendor/ffmpeg/darwin-arm64/ffmpeg bash scripts/braw-build.sh
+      # the same reader inside the packed app, as the person gets it: the framework must survive electron-builder
+      - run: npm install --no-audit --no-fund
+      - run: npm run helper
+      - run: npx electron-builder --mac dir --arm64 --publish never
+        env:
+          CSC_IDENTITY_AUTO_DISCOVERY: 'false'
+      - name: The reader inside the packed app
+        run: |
+          B="out/mac-arm64/RoarPlay.app/Contents/Resources/bin"
+          ls -la "$B"; ls -la "$B/BlackmagicRawAPI.framework" "$B/BlackmagicRawAPI.framework/Versions" 2>/dev/null || true
+          find "$B/BlackmagicRawAPI.framework" -maxdepth 3 -type l -exec ls -la {} \; | head -20
+          SAMPLE=$(find /var/folders /tmp -name sample.braw 2>/dev/null | head -1)
+          [ -n "$SAMPLE" ] || { gh release download sdk-braw -R "$GITHUB_REPOSITORY" -D /tmp/z && cd /tmp/z && unzip -q *.zip && hdiutil attach -nobrowse -readonly -mountpoint /tmp/zd *.dmg && pkgutil --expand-full /tmp/zd/*.pkg /tmp/zp && SAMPLE=$(find /tmp/zp -name sample.braw | head -1); cd -; }
+          "$B/roarplay-braw" info "$SAMPLE"
