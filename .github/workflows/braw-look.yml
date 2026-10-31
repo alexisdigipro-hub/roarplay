@@ -1,0 +1,46 @@
+name: Look inside the Blackmagic RAW SDK
+
+# A Mac opens the SDK kept in the draft release sdk-braw and prints its tree and the parts of its header the decoder
+# helper is written against. Run by hand (Actions tab).
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  look:
+    runs-on: macos-latest
+    env:
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - name: Bring the SDK
+        run: |
+          gh release download sdk-braw -R "$GITHUB_REPOSITORY" -D sdk
+          cd sdk && unzip -q *.zip && ls -la
+          hdiutil attach -nobrowse -readonly -mountpoint /tmp/brawdmg *.dmg
+          ls -la /tmp/brawdmg
+          PKG=$(ls /tmp/brawdmg/*.pkg | head -1); echo "pkg: $PKG"
+          pkgutil --expand-full "$PKG" /tmp/brawpkg
+          find /tmp/brawpkg -maxdepth 3 | head -60
+      - name: The SDK's tree
+        run: |
+          SDK=$(find /tmp/brawpkg -type d -name "Blackmagic RAW SDK" | head -1); echo "SDK=$SDK"
+          find "$SDK" -maxdepth 4 | grep -v "/Samples/.*/.*/" | head -200
+      - name: The header
+        run: |
+          H=$(find /tmp/brawpkg -name BlackmagicRawAPI.h -path "*Mac*" | head -1); echo "H=$H"
+          grep -n "class BMD_PUBLIC IBlackmagicRawCallback" -A 40 "$H" || true
+          grep -n "class BMD_PUBLIC IBlackmagicRawClip \|class BMD_PUBLIC IBlackmagicRawClip:" -A 45 "$H" || true
+          grep -n "class BMD_PUBLIC IBlackmagicRawClipAudio" -A 20 "$H" || true
+          grep -n "class BMD_PUBLIC IBlackmagicRawFrame \|class BMD_PUBLIC IBlackmagicRawFrame:" -A 30 "$H" || true
+          grep -n "class BMD_PUBLIC IBlackmagicRawProcessedImage" -A 16 "$H" || true
+          grep -n "class BMD_PUBLIC IBlackmagicRaw \|class BMD_PUBLIC IBlackmagicRaw:" -A 30 "$H" || true
+          grep -n "class BMD_PUBLIC IBlackmagicRawFactory" -A 12 "$H" || true
+          grep -n "blackmagicRawResolutionScale\|blackmagicRawResourceFormat\|CreateBlackmagicRawFactoryInstance" "$H" | head -40
+          grep -n "IID_IBlackmagicRawClipAudio\|IID_IBlackmagicRawClipEx\|IID_IBlackmagicRawConfiguration " "$H" | head
+      - name: A sample
+        run: |
+          S=$(find /tmp/brawpkg -path "*Mac*Samples*ExtractFrame*" -name "*.cpp" | head -1); echo "S=$S"; cat "$S" | head -260
+          find /tmp/brawpkg -path "*Mac*" -name "*Dispatch*"
+          find /tmp/brawpkg -path "*Mac*" -name "Makefile" | head -3 | xargs -I{} sh -c 'echo "== {}"; cat "{}"'
