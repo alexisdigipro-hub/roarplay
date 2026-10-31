@@ -61,8 +61,14 @@ these is happening.
 - **Minimal by default**: the row shows the clock, In and Out, the frame steps, J, play, L, the volume, the bezel and full
   screen; everything else (loop, speed, subtitles, picture, sound, the saved frame, picture in picture) sits behind ⋯.
   While a file plays and the mouse rests, every control fades and only the picture stays (Settings > Window).
-- **Open with RoarPlay** (Settings): tick the kinds of file (the common ones are ticked) and press Apply once; the Mac
-  confirms each kind. On Windows the system's Default apps page opens, where you pick RoarPlay.
+- **Open with RoarPlay** (Settings): turn on groups of kinds (common video, camera and broadcast, music, studio sound…)
+  or single kinds, press Apply once. RoarPlay asks the Mac first for the general kinds (two confirmations), then only for
+  what is still missing, and shows which kinds already open with it. On Windows the system's Default apps page opens.
+- **Settings** in pages: General, Playing, Picture, Sound, Subtitles, Window, Saved frames, Open with RoarPlay, Keys,
+  with the list kept or not, play on open, the Shift jump, the look and the sound kept from file to file, a preferred
+  subtitle language, the fade delay, the side at start, the bezel on top, the saved frame's name.
+- A stream starts playing once two seconds have come, and the window takes its shape before it starts, so the first
+  seconds do not stutter.
 
 ## The professional side (Scopes and Notes tabs)
 

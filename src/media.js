@@ -268,7 +268,8 @@ function streamArgs(file, info, mode, start = 0, { track = 0, hw = false, part =
   const enc = hw && platform === 'darwin'
     ? ['-c:v', 'h264_videotoolbox', '-b:v', maxH && maxH <= 1080 ? '16M' : '40M', '-realtime', '1', '-allow_sw', '1', '-profile:v', 'high']
     : ['-c:v', 'libx264', '-preset', 'ultrafast', '-tune', 'zerolatency', '-crf', '18', '-profile:v', 'high', '-threads', '0'];
-  return [...head, '-map', '0:v:0', '-an', '-vf', filters.join(','), ...enc, '-bf', '0', '-g', String(Math.max(1, Math.round(fps))), '-fps_mode', 'passthrough', ...tail];
+  // a keyframe every half second: the first piece reaches the window sooner, and a seek lands closer
+  return [...head, '-map', '0:v:0', '-an', '-vf', filters.join(','), ...enc, '-bf', '0', '-g', String(Math.max(1, Math.round(fps / 2))), '-fps_mode', 'passthrough', ...tail];
 }
 
 // what the window is told each part is
