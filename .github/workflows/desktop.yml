@@ -36,6 +36,7 @@ jobs:
         run: |
           node scripts/fetch-ffmpeg.js darwin-arm64
           FFMPEG=vendor/ffmpeg/darwin-arm64/ffmpeg bash scripts/braw-build.sh
+          FFMPEG=vendor/ffmpeg/darwin-arm64/ffmpeg bash scripts/r3d-build.sh
       # GitHub's Macs sometimes fail to make a .dmg ("hdiutil: resource busy"): up to three tries
       - if: runner.os == 'macOS'
         shell: bash

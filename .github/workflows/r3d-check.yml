@@ -42,7 +42,7 @@ jobs:
       - name: Alex's clip
         run: |
           gh release download sdk-r3d-clip -R "$GITHUB_REPOSITORY" -D /tmp/clip || { echo "no clip yet"; exit 0; }
-          for P in /tmp/clip/*.part-aa; do [ -e "$P" ] && cat "${P%.part-aa}".part-* > "${P%.part-aa}" && rm "${P%.part-aa}".part-*; done
+          for P in /tmp/clip/*.part-aa; do if [ -e "$P" ]; then cat "${P%.part-aa}".part-* > "${P%.part-aa}" && rm "${P%.part-aa}".part-*; fi; done
           ls -la /tmp/clip
           C=$(ls /tmp/clip/*.R3D /tmp/clip/*.r3d 2>/dev/null | head -1); echo "clip: $C"
           cd /tmp

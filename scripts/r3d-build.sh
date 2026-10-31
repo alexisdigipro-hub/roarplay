@@ -30,7 +30,8 @@ for f in build/helper/roarplay-r3d build/helper/*.dylib; do codesign --force --s
 ls -la build/helper
 # proof on Alex's clip, if there is one: facts, a frame at a quarter through ffmpeg, a second of sound
 if gh release download sdk-r3d-clip -R "${GITHUB_REPOSITORY:-alexisdigipro-hub/roarplay}" -D "$W/clip" 2>/dev/null; then
-  for P in "$W"/clip/*.part-aa; do [ -e "$P" ] && cat "${P%.part-aa}".part-* > "${P%.part-aa}" && rm "${P%.part-aa}".part-*; done
+  for P in "$W"/clip/*.part-aa; do if [ -e "$P" ]; then cat "${P%.part-aa}".part-* > "${P%.part-aa}" && rm "${P%.part-aa}".part-*; fi; done
+  set +o pipefail # head stops the reader early on purpose
   C=$(ls "$W"/clip/*.R3D "$W"/clip/*.r3d 2>/dev/null | head -1)
   INFO=$(build/helper/roarplay-r3d info "$C"); echo "info: $INFO"
   WH=$(node -e "const i=JSON.parse(process.argv[1]); console.log(Math.floor(i.width/4)+'x'+Math.floor(i.height/4))" "$INFO")

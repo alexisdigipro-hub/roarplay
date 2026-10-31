@@ -78,14 +78,20 @@ let BRAW = '';
 const setBrawPath = (p) => { BRAW = p && require('fs').existsSync(p) ? p : ''; };
 const isBraw = (file) => /\.braw$/i.test(file);
 const brawReady = () => !!BRAW;
+// RED R3D (and Nikon N-RAW, which the same SDK reads), 0.5: RED's SDK's reader (helper/r3d.cpp) the same way, BGRA
+// frames and 32-bit sound. A clip it reads is carried as info.braw with reader 'r3d': one path for every camera reader.
+let R3D = '';
+const setR3dPath = (p) => { R3D = p && require('fs').existsSync(p) ? p : ''; };
+const isR3d = (file) => /\.(r3d|nev)$/i.test(file);
+const readerPath = (info) => (info && info.braw && info.braw.reader === 'r3d' ? R3D : BRAW);
 // how a BRAW picture is coloured (Alex, 31 Oct): '709' Rec.709 (the default), 'lut' the LUT the camera wrote into the
 // clip (Rec.709 where it has none), 'shot' as the camera was set (Film, Extended Video...)
 let BRAW_LOOK = '709';
 const setBrawLook = (l) => { BRAW_LOOK = ['709', 'lut', 'shot'].includes(l) ? l : '709'; };
 const brawLook = () => BRAW_LOOK;
-function brawInfo(file) {
+function brawInfo(file, bin = BRAW) {
   return new Promise((resolve) => {
-    execFile(BRAW, ['info', file], { windowsHide: true, timeout: 30000 }, (e, out, err) => {
+    execFile(bin, ['info', file], { windowsHide: true, timeout: 30000 }, (e, out, err) => {
       try { resolve(JSON.parse(String(out).trim().split('\n').pop())); } catch { resolve({ error: String(err || (e && e.message) || 'Cannot read the clip').trim().split('\n').pop() }); }
     });
   });
@@ -96,13 +102,14 @@ function brawScale(h, maxH) { let s = 1; if (maxH > 0) while (s < 8 && h / s > m
 function brawSource(file, info, part, start, maxH) {
   const b = info.braw;
   if (part === 'audio') {
-    const a = b.audio, fmt = a.bits > 16 ? 's24le' : 's16le';
+    const a = b.audio, fmt = a.bits > 24 ? 's32le' : a.bits > 16 ? 's24le' : 's16le';
     return { cmd: ['audio', file, String(Math.max(0, Math.round(start * a.rate)))], input: ['-f', fmt, '-ar', String(a.rate), '-ac', String(a.channels), '-i', 'pipe:0'] };
   }
   const s = brawScale(b.height, maxH);
   const w = Math.floor(b.width / s), h = Math.floor(b.height / s);
   const frame = Math.max(0, Math.round(start * b.fps));
-  return { cmd: ['video', file, String(frame), String(s), BRAW_LOOK], input: ['-f', 'rawvideo', '-pix_fmt', 'rgba', '-s', `${w}x${h}`, '-r', String(b.fps), '-i', 'pipe:0'], scale: s, w, h, frame };
+  const red = b.reader === 'r3d';
+  return { cmd: red ? ['video', file, String(frame), String(s)] : ['video', file, String(frame), String(s), BRAW_LOOK], input: ['-f', 'rawvideo', '-pix_fmt', red ? 'bgra' : 'rgba', '-s', `${w}x${h}`, '-r', String(b.fps), '-i', 'pipe:0'], scale: s, w, h, frame };
 }
 
 // ---------- what a file is made of ----------
@@ -203,23 +210,26 @@ function parseDetail(text) {
   return d;
 }
 
-async function probeBraw(file) {
-  const b = await brawInfo(file);
-  if (b.error || !b.width) return { container: '', error: b.error || 'Not a Blackmagic RAW clip', readerError: b.error || 'Not a Blackmagic RAW clip', video: null, audio: [], detail: { format: { name: 'braw', tags: {} }, streams: [], chapters: [] }, subs: [], chapters: [], raw: '' };
+async function probeBraw(file, reader = 'braw') {
+  const red = reader === 'r3d', what = red ? 'Not a RED clip' : 'Not a Blackmagic RAW clip';
+  const b = await brawInfo(file, red ? R3D : BRAW);
+  if (!b.error && b.width) b.reader = reader;
+  if (b.error || !b.width) return { container: '', error: b.error || what, readerError: b.error || what, video: null, audio: [], detail: { format: { name: 'braw', tags: {} }, streams: [], chapters: [] }, subs: [], chapters: [], raw: '' };
   const fps = b.fps || 24, duration = b.frames / fps;
-  const a = b.audio && b.audio.channels ? [{ index: 1, lang: '', codec: `pcm_s${b.audio.bits > 16 ? 24 : 16}le`, profile: '', sampleRate: b.audio.rate, channels: b.audio.channels === 1 ? 'mono' : b.audio.channels === 2 ? 'stereo' : `${b.audio.channels} ch`, bits: b.audio.bits, bitrate: b.audio.rate * b.audio.bits * b.audio.channels }] : [];
+  const a = b.audio && b.audio.channels ? [{ index: 1, lang: '', codec: `pcm_s${b.audio.bits > 24 ? 32 : b.audio.bits > 16 ? 24 : 16}le`, profile: '', sampleRate: b.audio.rate, channels: b.audio.channels === 1 ? 'mono' : b.audio.channels === 2 ? 'stereo' : `${b.audio.channels} ch`, bits: b.audio.bits, bitrate: b.audio.rate * b.audio.bits * b.audio.channels }] : [];
   const tags = { camera: b.camera || '', frames: String(b.frames) };
   return {
-    container: 'braw', duration, start: 0, bitrate: 0, timecode: b.timecode || '', title: '', artist: '', album: '', cover: false, subtitles: 0, braw: b, phase: 0,
-    video: { index: 0, codec: 'braw', profile: b.camera || '', pixfmt: 'raw', colour: '', interlaced: false, width: b.width, height: b.height, fps, bitrate: 0 },
+    container: red ? 'r3d' : 'braw', duration, start: 0, bitrate: 0, timecode: b.timecode || '', title: '', artist: '', album: '', cover: false, subtitles: 0, braw: b, phase: 0,
+    video: { index: 0, codec: red ? 'redcode' : 'braw', profile: b.camera || '', pixfmt: 'raw', colour: '', interlaced: false, width: b.width, height: b.height, fps, bitrate: 0 },
     audio: a, subs: [], chapters: [],
-    detail: { format: { name: 'Blackmagic RAW', tags, duration: '', start: '0', bitrate: 0 }, streams: [{ index: 0, id: '', lang: '', type: 'Video', line: `braw, ${b.width}x${b.height}, ${fps} fps`, parts: ['Blackmagic RAW', 'raw', `${b.width}x${b.height}`, '', `${fps} fps`], flags: [], tags: { camera: b.camera || '', timecode: b.timecode || '', gamma: b.gamma || '', gamut: b.gamut || '', 'camera LUT': b.cameraLut ? 'yes' : 'no', 'decode sizes': b.sizes || '' }, side: [] }, ...(a.length ? [{ index: 1, id: '', lang: '', type: 'Audio', line: `pcm, ${b.audio.rate} Hz, ${b.audio.channels} ch, ${b.audio.bits} bit`, parts: [`pcm (${b.audio.bits} bit)`, `${b.audio.rate} Hz`, a[0].channels, `s${b.audio.bits}`], flags: [], tags: {}, side: [] }] : [])], chapters: [], programs: 0 },
+    detail: { format: { name: red ? 'REDCODE RAW' : 'Blackmagic RAW', tags, duration: '', start: '0', bitrate: 0 }, streams: [{ index: 0, id: '', lang: '', type: 'Video', line: `${red ? 'redcode' : 'braw'}, ${b.width}x${b.height}, ${fps} fps`, parts: [red ? 'REDCODE RAW' : 'Blackmagic RAW', 'raw', `${b.width}x${b.height}`, '', `${fps} fps`], flags: [], tags: red ? { camera: b.camera || '', timecode: b.timecode || '' } : { camera: b.camera || '', timecode: b.timecode || '', gamma: b.gamma || '', gamut: b.gamut || '', 'camera LUT': b.cameraLut ? 'yes' : 'no', 'decode sizes': b.sizes || '' }, side: [] }, ...(a.length ? [{ index: 1, id: '', lang: '', type: 'Audio', line: `pcm, ${b.audio.rate} Hz, ${b.audio.channels} ch, ${b.audio.bits} bit`, parts: [`pcm (${b.audio.bits} bit)`, `${b.audio.rate} Hz`, a[0].channels, `s${b.audio.bits}`], flags: [], tags: {}, side: [] }] : [])], chapters: [], programs: 0 },
     raw: JSON.stringify(b, null, 2),
   };
 }
 
 function probe(file, opts = {}) {
   if (isBraw(file) && BRAW) return probeBraw(file);
+  if (isR3d(file) && R3D) return probeBraw(file, 'r3d');
   return new Promise((resolve) => {
     execFile(FFMPEG, ['-hide_banner', ...inputArgs(file, opts)], { maxBuffer: 16 * 1024 * 1024, windowsHide: true, timeout: 30000 }, (_e, _o, stderr) => {
       const text = String(stderr || '').replace(/\nAt least one output file must be specified\s*$/, '');
@@ -393,7 +403,7 @@ function cover(file) {
 function brawFrame(file, info, at, maxH, outArgs) {
   return new Promise((resolve, reject) => {
     const src = brawSource(file, info, 'video', at, maxH);
-    const r = spawn(BRAW, src.cmd, { windowsHide: true });
+    const r = spawn(readerPath(info), src.cmd, { windowsHide: true });
     const f = spawn(FFMPEG, ['-hide_banner', '-loglevel', 'error', '-y', ...src.input, '-frames:v', '1', ...outArgs], { windowsHide: true });
     r.stdout.pipe(f.stdin);
     f.stdin.on('error', () => {});
@@ -569,4 +579,4 @@ function parseCube(text) {
   return lut;
 }
 
-module.exports = { setFfmpegPath, ffmpegPath, setBrawPath, setBrawLook, brawLook, brawReady, isBraw, brawSource, brawScale, brawInfo, VIDEO_EXT, AUDIO_EXT, SUB_EXT, RAW, kindOf, rawOf, isUrl, sequenceOf, inputArgs, parts, parseProbe, parseDetail, probe, plan, streamArgs, mimeOf, firstPacket, waveform, cover, frameAt, thumb, subtitles, subtitleFilesBeside, windowPlaysVideo, packets, _sortPackets, qc, packetFindings, parseCube };
+module.exports = { setFfmpegPath, ffmpegPath, setBrawPath, setR3dPath, isR3d, readerPath, setBrawLook, brawLook, brawReady, isBraw, brawSource, brawScale, brawInfo, VIDEO_EXT, AUDIO_EXT, SUB_EXT, RAW, kindOf, rawOf, isUrl, sequenceOf, inputArgs, parts, parseProbe, parseDetail, probe, plan, streamArgs, mimeOf, firstPacket, waveform, cover, frameAt, thumb, subtitles, subtitleFilesBeside, windowPlaysVideo, packets, _sortPackets, qc, packetFindings, parseCube };
