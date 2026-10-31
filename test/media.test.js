@@ -117,7 +117,7 @@ const ok = (what) => { n++; console.log(`  ✓ ${what}`); };
   assert.deepStrictEqual(m.subtitleFilesBeside(P('native.mp4')).map((x) => [x.name, x.lang]), [['native.el.srt', 'el']]);
   const vtt = await m.subtitles(P('native.mp4'), { subFile: P('native.el.srt') });
   assert.ok(vtt.startsWith('WEBVTT') && vtt.includes('00:01.000 --> 00:03.000') && vtt.includes('Γεια σου <i>κόσμε</i>'));
-  ff(...SRC, '-i', P('native.el.srt'), '-map', '0:v', '-map', '1:a', '-map', '2:s', '-c:v', 'libx264', '-pix_fmt', 'yuv420p', '-c:a', 'aac', '-c:s', 'mov_text', '-metadata:s:s:0', 'language=ell', P('subbed.mp4'));
+  ff('-i', P('native.mp4'), '-i', P('native.el.srt'), '-map', '0', '-map', '1:s', '-c', 'copy', '-c:s', 'mov_text', '-metadata:s:s:0', 'language=ell', P('subbed.mp4'));
   const sb = (await probe('subbed.mp4')).info;
   assert.strictEqual(sb.subs.length, 1); assert.strictEqual(sb.subs[0].lang, 'ell'); assert.ok(!sb.subs[0].bitmap);
   assert.ok((await m.subtitles(P('subbed.mp4'), { track: 0 })).includes('Γεια σου'));
