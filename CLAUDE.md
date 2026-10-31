@@ -43,6 +43,11 @@ goes through `t()` or a data-i18n attribute and gets its Greek.
   ebur128, decode errors) plus packet gaps; Notes tab: rating and markers in localStorage 'notes', CSV and EDL out
   (main.js save-text); LUT: media.js parseCube, a WebGL2 3D texture in #glc over the video (applyLut / drawLutFrame);
   compare: B player over A, wipe or side by side, syncB every 300 ms; six-channel downmix in applyAudio.
+- 0.4.0 Blackmagic RAW (Alex, 31 Oct): helper/braw.cpp against the Blackmagic RAW SDK, which is never in the repo: Alex
+  sends it with RoarTransfer, `.github/workflows/sdk.yml` (manual, token + name) copies it into the draft release
+  `sdk-braw`, `scripts/braw-build.sh` (desktop.yml and braw-check.yml, Mac) builds the reader universal and proves it
+  on the SDK's sample.braw. Shipped as Resources/bin/roarplay-braw with BlackmagicRawAPI.framework beside it. media.js:
+  probeBraw, brawSource (reader args + ffmpeg rawvideo / PCM input), brawScale; main.js pipes the reader into ffmpeg.
 - Releases: bump `version` in package.json, tag `vX.Y.Z`, push the tag (.github/workflows/desktop.yml); the release's
   files are the download links (themadlions.com/lab/roarplay/) and what src/updater.js looks at.
 - Work on a branch, open a PR, wait for the green check (.github/workflows/check.yml), merge it yourself.

@@ -72,6 +72,34 @@ function kindOf(file) {
 }
 const rawOf = (file) => RAW[path.extname(file).slice(1).toLowerCase()] || null;
 
+// Blackmagic RAW (0.4): the SDK's own reader (helper/braw.cpp), shipped beside ffmpeg on a Mac. It hands ffmpeg the
+// decoded frames (RGBA) and the sound (PCM) on a pipe, so a BRAW clip plays as any other file made on the fly.
+let BRAW = '';
+const setBrawPath = (p) => { BRAW = p && require('fs').existsSync(p) ? p : ''; };
+const isBraw = (file) => /\.braw$/i.test(file);
+const brawReady = () => !!BRAW;
+function brawInfo(file) {
+  return new Promise((resolve) => {
+    execFile(BRAW, ['info', file], { windowsHide: true, timeout: 30000 }, (e, out, err) => {
+      try { resolve(JSON.parse(String(out).trim().split('\n').pop())); } catch { resolve({ error: String(err || (e && e.message) || 'Cannot read the clip').trim().split('\n').pop() }); }
+    });
+  });
+}
+// the scale the SDK decodes at (1, 2, 4, 8) for a picture no taller than maxH (0: the full size)
+function brawScale(h, maxH) { let s = 1; if (maxH > 0) while (s < 8 && h / s > maxH * 1.05) s *= 2; return s; }
+// what the reader is run with, and what ffmpeg reads from it, for one part from `start` seconds
+function brawSource(file, info, part, start, maxH) {
+  const b = info.braw;
+  if (part === 'audio') {
+    const a = b.audio, fmt = a.bits > 16 ? 's24le' : 's16le';
+    return { cmd: ['audio', file, String(Math.max(0, Math.round(start * a.rate)))], input: ['-f', fmt, '-ar', String(a.rate), '-ac', String(a.channels), '-i', 'pipe:0'] };
+  }
+  const s = brawScale(b.height, maxH);
+  const w = Math.floor(b.width / s), h = Math.floor(b.height / s);
+  const frame = Math.max(0, Math.round(start * b.fps));
+  return { cmd: ['video', file, String(frame), String(s)], input: ['-f', 'rawvideo', '-pix_fmt', 'rgba', '-s', `${w}x${h}`, '-r', String(b.fps), '-i', 'pipe:0'], scale: s, w, h, frame };
+}
+
 // ---------- what a file is made of ----------
 
 // "a, b(c, d), e" -> ["a", "b(c, d)", "e"]: ffmpeg's stream line, split at the commas outside brackets
@@ -170,7 +198,23 @@ function parseDetail(text) {
   return d;
 }
 
+async function probeBraw(file) {
+  const b = await brawInfo(file);
+  if (b.error || !b.width) return { container: '', error: b.error || 'Not a Blackmagic RAW clip', video: null, audio: [], detail: { format: { name: 'braw', tags: {} }, streams: [], chapters: [] }, subs: [], chapters: [], raw: '' };
+  const fps = b.fps || 24, duration = b.frames / fps;
+  const a = b.audio && b.audio.channels ? [{ index: 1, lang: '', codec: `pcm_s${b.audio.bits > 16 ? 24 : 16}le`, profile: '', sampleRate: b.audio.rate, channels: b.audio.channels === 1 ? 'mono' : b.audio.channels === 2 ? 'stereo' : `${b.audio.channels} ch`, bits: b.audio.bits, bitrate: b.audio.rate * b.audio.bits * b.audio.channels }] : [];
+  const tags = { camera: b.camera || '', frames: String(b.frames) };
+  return {
+    container: 'braw', duration, start: 0, bitrate: 0, timecode: b.timecode || '', title: '', artist: '', album: '', cover: false, subtitles: 0, braw: b, phase: 0,
+    video: { index: 0, codec: 'braw', profile: b.camera || '', pixfmt: 'raw', colour: '', interlaced: false, width: b.width, height: b.height, fps, bitrate: 0 },
+    audio: a, subs: [], chapters: [],
+    detail: { format: { name: 'Blackmagic RAW', tags, duration: '', start: '0', bitrate: 0 }, streams: [{ index: 0, id: '', lang: '', type: 'Video', line: `braw, ${b.width}x${b.height}, ${fps} fps`, parts: ['Blackmagic RAW', 'raw', `${b.width}x${b.height}`, '', `${fps} fps`], flags: [], tags: { camera: b.camera || '', timecode: b.timecode || '' }, side: [] }, ...(a.length ? [{ index: 1, id: '', lang: '', type: 'Audio', line: `pcm, ${b.audio.rate} Hz, ${b.audio.channels} ch, ${b.audio.bits} bit`, parts: [`pcm (${b.audio.bits} bit)`, `${b.audio.rate} Hz`, a[0].channels, `s${b.audio.bits}`], flags: [], tags: {}, side: [] }] : [])], chapters: [], programs: 0 },
+    raw: JSON.stringify(b, null, 2),
+  };
+}
+
 function probe(file, opts = {}) {
+  if (isBraw(file) && BRAW) return probeBraw(file);
   return new Promise((resolve) => {
     execFile(FFMPEG, ['-hide_banner', ...inputArgs(file, opts)], { maxBuffer: 16 * 1024 * 1024, windowsHide: true, timeout: 30000 }, (_e, _o, stderr) => {
       const text = String(stderr || '').replace(/\nAt least one output file must be specified\s*$/, '');
@@ -218,6 +262,7 @@ function windowPlaysAudio(container, ext, a) {
 // how to play `info` (the file's probe), with sound track `track`
 function plan(info, file, platform = process.platform, track = 0) {
   const ext = path.extname(file).slice(1).toLowerCase();
+  if (info && info.braw && !info.error) return { mode: 'transcode' };
   const raw = rawOf(file);
   if (raw) return { mode: 'none', why: 'raw', format: raw[0], app: raw[1] };
   if (!info || info.error || (!info.video && !info.audio.length)) return { mode: 'none', why: 'unreadable' };
@@ -248,13 +293,15 @@ const FRAG = ['-f', 'mp4', '-movflags', 'frag_keyframe+empty_moov+default_base_m
 
 // ffmpeg's arguments for one part ('video' or 'audio') of `mode` from `start` seconds. hw: the Mac's own H.264 encoder.
 function streamArgs(file, info, mode, start = 0, { track = 0, hw = false, part = 'video', platform = process.platform, maxH = 1080 } = {}) {
-  const head = ['-hide_banner', '-loglevel', 'error', '-nostdin', ...(start > 0 ? ['-ss', start.toFixed(3)] : []), ...inputArgs(file, { fps: info.sequence?.fps })];
+  const head = info.braw
+    ? ['-hide_banner', '-loglevel', 'error', ...brawSource(file, info, part, start, maxH).input]
+    : ['-hide_banner', '-loglevel', 'error', '-nostdin', ...(start > 0 ? ['-ss', start.toFixed(3)] : []), ...inputArgs(file, { fps: info.sequence?.fps })];
   const tail = ['-sn', '-dn', '-map_metadata', '-1', '-map_chapters', '-1', ...FRAG, 'pipe:1'];
   if (part === 'audio') {
     const a = Math.min(track, Math.max(0, info.audio.length - 1));
     // a sound file keeps every bit (FLAC); a film's sound is AAC, two channels
     const enc = mode === 'audio' ? ['-c:a', 'flac', '-strict', '-2'] : ['-c:a', 'aac', '-b:a', '256k', '-ac', '2'];
-    return [...head, '-map', `0:a:${a}`, '-vn', ...enc, ...tail];
+    return [...head, '-map', info.braw ? '0:a:0' : `0:a:${a}`, '-vn', ...enc, ...tail];
   }
   if (mode === 'remux') {
     return [...head, '-map', '0:v:0', '-an', '-c:v', 'copy', ...(info.video.codec === 'hevc' ? ['-tag:v', 'hvc1'] : []), ...tail];
@@ -264,6 +311,7 @@ function streamArgs(file, info, mode, start = 0, { track = 0, hw = false, part =
   const v = info.video;
   const fps = v.fps > 0 && v.fps < 1000 ? v.fps : 25;
   const scale = maxH > 0 ? `scale=-2:'min(ih,${maxH})':flags=fast_bilinear` : "scale='min(iw,3840)':-2:flags=bicubic";
+  // the reader already decoded at the right size; only an even width and height are made
   const filters = [v.interlaced ? 'yadif=0:-1:0' : null, scale, hw ? 'format=nv12' : 'format=yuv420p'].filter(Boolean);
   const enc = hw && platform === 'darwin'
     ? ['-c:v', 'h264_videotoolbox', '-b:v', maxH && maxH <= 1080 ? '16M' : '40M', '-realtime', '1', '-allow_sw', '1', '-profile:v', 'high']
@@ -334,8 +382,25 @@ function cover(file) {
   });
 }
 
+// one frame of a BRAW clip through the reader into ffmpeg, as `out` (a file) or a JPEG buffer
+function brawFrame(file, info, at, maxH, outArgs) {
+  return new Promise((resolve, reject) => {
+    const src = brawSource(file, info, 'video', at, maxH);
+    const r = spawn(BRAW, src.cmd, { windowsHide: true });
+    const f = spawn(FFMPEG, ['-hide_banner', '-loglevel', 'error', '-y', ...src.input, '-frames:v', '1', ...outArgs], { windowsHide: true });
+    r.stdout.pipe(f.stdin);
+    f.stdin.on('error', () => {});
+    r.stdout.on('error', () => {});
+    const chunks = []; let err = '';
+    f.stdout.on('data', (d) => chunks.push(d));
+    f.stderr.on('data', (d) => { err += d; });
+    f.on('close', (code) => { try { r.kill('SIGKILL'); } catch {} if (code === 0) resolve(Buffer.concat(chunks)); else reject(new Error(err.trim().split('\n').pop() || 'The frame could not be made')); });
+  });
+}
+
 // one frame as a picture (the snapshot), at `at` seconds, at the file's full size; PNG or JPG by the name
 function frameAt(file, at, out, info = null) {
+  if (info && info.braw) return brawFrame(file, info, at, 0, [...(/\.jpe?g$/i.test(out) ? ['-q:v', '2'] : []), out]).then(() => out);
   return new Promise((resolve, reject) => {
     execFile(FFMPEG, ['-hide_banner', '-loglevel', 'error', '-nostdin', '-y', '-ss', Math.max(0, at).toFixed(3), ...inputArgs(file, { fps: info?.sequence?.fps }), '-map', '0:v:0', '-frames:v', '1',
       ...(/\.jpe?g$/i.test(out) ? ['-q:v', '2'] : []), out],
@@ -345,6 +410,7 @@ function frameAt(file, at, out, info = null) {
 
 // a small frame at `at` seconds for the bar's thumbnail, as a JPEG
 function thumb(file, at, info = null, width = 240) {
+  if (info && info.braw) return brawFrame(file, info, at, 270, ['-vf', `scale=${width}:-2`, '-c:v', 'mjpeg', '-q:v', '6', '-f', 'image2pipe', 'pipe:1']).catch(() => null);
   return new Promise((resolve) => {
     execFile(FFMPEG, ['-hide_banner', '-loglevel', 'error', '-nostdin', '-ss', Math.max(0, at).toFixed(3), ...inputArgs(file, { fps: info?.sequence?.fps }), '-map', '0:v:0', '-frames:v', '1',
       '-vf', `scale=${width}:-2:flags=fast_bilinear`, '-c:v', 'mjpeg', '-q:v', '6', '-f', 'image2pipe', 'pipe:1'], { encoding: 'buffer', maxBuffer: 4 * 1024 * 1024, windowsHide: true, timeout: 8000 },
@@ -496,4 +562,4 @@ function parseCube(text) {
   return lut;
 }
 
-module.exports = { setFfmpegPath, ffmpegPath, VIDEO_EXT, AUDIO_EXT, SUB_EXT, RAW, kindOf, rawOf, isUrl, sequenceOf, inputArgs, parts, parseProbe, parseDetail, probe, plan, streamArgs, mimeOf, firstPacket, waveform, cover, frameAt, thumb, subtitles, subtitleFilesBeside, windowPlaysVideo, packets, _sortPackets, qc, packetFindings, parseCube };
+module.exports = { setFfmpegPath, ffmpegPath, setBrawPath, brawReady, isBraw, brawSource, brawScale, brawInfo, VIDEO_EXT, AUDIO_EXT, SUB_EXT, RAW, kindOf, rawOf, isUrl, sequenceOf, inputArgs, parts, parseProbe, parseDetail, probe, plan, streamArgs, mimeOf, firstPacket, waveform, cover, frameAt, thumb, subtitles, subtitleFilesBeside, windowPlaysVideo, packets, _sortPackets, qc, packetFindings, parseCube };

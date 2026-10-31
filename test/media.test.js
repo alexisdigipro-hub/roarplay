@@ -146,6 +146,19 @@ const ok = (what) => { n++; console.log(`  ✓ ${what}`); };
   assert.throws(() => m.parseCube('hello'));
   ok('a .cube read, 3D and 1D, and what is not one refused');
 
+  console.log('Blackmagic RAW');
+  assert.strictEqual(m.brawScale(2160, 1080), 2); assert.strictEqual(m.brawScale(4320, 1080), 4); assert.strictEqual(m.brawScale(1080, 1080), 1); assert.strictEqual(m.brawScale(6144, 0), 1); assert.strictEqual(m.brawScale(12288, 720), 8);
+  const bi = { braw: { width: 6144, height: 3456, fps: 24, frames: 240, audio: { channels: 2, bits: 24, rate: 48000 } }, video: { fps: 24 }, audio: [{}] };
+  const sv = m.brawSource('/x/A001.braw', bi, 'video', 2.5, 1080);
+  assert.deepStrictEqual(sv.cmd, ['video', '/x/A001.braw', '60', '4']); assert.ok(sv.input.join(' ').includes('-pix_fmt rgba -s 1536x864 -r 24 -i pipe:0'));
+  const sa = m.brawSource('/x/A001.braw', bi, 'audio', 2.5, 1080);
+  assert.deepStrictEqual(sa.cmd, ['audio', '/x/A001.braw', '120000']); assert.ok(sa.input.join(' ').includes('-f s24le -ar 48000 -ac 2 -i pipe:0'));
+  assert.strictEqual(m.plan(bi, '/x/A001.braw').mode, 'transcode');
+  assert.strictEqual(m.plan({ error: 'x', video: null, audio: [] }, '/x/A001.braw').why, 'raw');
+  const sva = m.streamArgs('/x/A001.braw', bi, 'transcode', 2.5, { part: 'video' });
+  assert.ok(!sva.includes('-ss') && sva.includes('pipe:0'));
+  ok('a BRAW clip: the reader\'s frame, scale and sample, ffmpeg reading its pipe');
+
   console.log('waveform, cover, snapshot');
   const w = await m.waveform(P('tone.wav'), 0, 100, 4);
   assert.ok(w.length >= 95 && w.length <= 105, `${w.length} bins`); assert.ok(w.slice(0, -1).every((x) => x > 0.1 && x <= 1), `peaks ${w.slice(0, 3)}`);

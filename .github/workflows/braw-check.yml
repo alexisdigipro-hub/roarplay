@@ -1,0 +1,25 @@
+name: Check the Blackmagic RAW reader
+
+# On a Mac, when the reader or its build changes: the SDK from the draft release sdk-braw, the reader built universal
+# and proved on the SDK's sample clip (scripts/braw-build.sh).
+on:
+  pull_request:
+    branches: [main]
+    paths: ['helper/braw.cpp', 'scripts/braw-build.sh', '.github/workflows/braw-check.yml']
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  braw:
+    runs-on: macos-latest
+    env:
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: node scripts/fetch-ffmpeg.js darwin-arm64
+      - run: FFMPEG=vendor/ffmpeg/darwin-arm64/ffmpeg bash scripts/braw-build.sh
