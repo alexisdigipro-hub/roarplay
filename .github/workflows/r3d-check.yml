@@ -29,7 +29,7 @@ jobs:
           grep -n "class Clip" -A3 "$I/R3DSDK.h" | head
           grep -n "Width()\|Height()\|VideoAudioFramerate\|VideoFrameCount\|Timecode(\|AbsoluteTimecode\|MetadataExists\|MetadataItemAsString\|AudioChannelCount\|AudioSampleRate\|AudioSampleCount\|DecodeAudio(\|DecodeVideoFrame(\|GetDefaultImageProcessingSettings\|Status()" "$I/R3DSDK.h" | head -40
           grep -n "PixelType_8Bit\|DECODE_FULL_RES_PREMIUM\|DECODE_HALF_RES_GOOD\|DECODE_QUARTER_RES_GOOD\|DECODE_EIGHT_RES_GOOD\|RMD_CAMERA_MODEL\b\|struct VideoDecodeJob\|class VideoDecodeJob" "$I"/*.h | head -30
-          sed -n '/class VideoDecodeJob/,/};/p' "$I/R3DSDK.h" | head -60
+          sed -n '/^struct VideoDecodeJob/,/^};/p' "$I/R3DSDKDefinitions.h" | head -80
           S=$(ls -d "/tmp/R3DSDK"*/"Sample code"); sed -n 1,200p "$S/Audio decode/ExtractAudioSample.cpp" | grep -v "^\s*//" | head -120
       - name: Build the reader on Linux
         run: |

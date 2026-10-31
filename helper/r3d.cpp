@@ -83,7 +83,7 @@ int main(int argc, char** argv) {
     std::string camera;
     if (clip->MetadataExists(RMD_CAMERA_MODEL)) camera = clip->MetadataItemAsString(RMD_CAMERA_MODEL);
     printf("{\"width\":%zu,\"height\":%zu,\"fps\":%.6f,\"frames\":%zu,\"timecode\":\"%s\",\"camera\":\"%s\",\"audio\":{\"channels\":%zu,\"bits\":32,\"rate\":%zu,\"samples\":%llu}}\n",
-           w, h, fps, frames, esc(tc).c_str(), esc(camera.c_str()).c_str(), clip->AudioChannelCount(), (size_t)clip->AudioSampleRate(),
+           w, h, fps, frames, esc(tc).c_str(), esc(camera.c_str()).c_str(), clip->AudioChannelCount(), (size_t)(clip->AudioChannelCount() ? clip->MetadataItemAsInt(RMD_SAMPLERATE) : 0),
            (unsigned long long)clip->AudioSampleCount());
     delete clip; FinalizeSdk(); return 0;
   }
@@ -94,15 +94,14 @@ int main(int argc, char** argv) {
     int s = argc > 4 ? atoi(argv[4]) : 1;
     VideoDecodeMode mode = s >= 8 ? DECODE_EIGHT_RES_GOOD : s >= 4 ? DECODE_QUARTER_RES_GOOD : s >= 2 ? DECODE_HALF_RES_GOOD : DECODE_FULL_RES_PREMIUM;
     const size_t ow = w / (s >= 8 ? 8 : s >= 4 ? 4 : s >= 2 ? 2 : 1), oh = h / (s >= 8 ? 8 : s >= 4 ? 4 : s >= 2 ? 2 : 1);
-    const size_t row = ow * 4, size = row * oh;
-    uint8_t* buf = (uint8_t*)aligned(size, 16);
+    const size_t size = ow * oh * 4; // BGRA, rows packed
+    uint8_t* buf = (uint8_t*)aligned(size, 512);
     if (!buf) return fail("Out of memory");
     ImageProcessingSettings ips;
     clip->GetDefaultImageProcessingSettings(ips);
     VideoDecodeJob job;
     job.Mode = mode;
     job.PixelType = PixelType_8Bit_BGRA_Interleaved;
-    job.BytesPerRow = row;
     job.OutputBuffer = buf;
     job.OutputBufferSize = size;
     job.ImageProcessing = &ips;
