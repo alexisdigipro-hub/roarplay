@@ -18,9 +18,13 @@ RoarPlay offers to move itself to Applications; from there it updates itself.
 - **VJ and LED-wall codecs**: Resolume DXV (every quality, with or without alpha), HAP, NotchLC.
 - **Image sequences**: DPX, EXR, PNG, TIFF, JPEG, DNG (CinemaDNG) numbered frames play as one clip, at 24, 25 or 30 fps (Settings).
 - **Web addresses**: a direct http(s) link to a video or sound file (Cmd/Ctrl+U, or drop the link on the window).
-- **Blackmagic RAW** (.braw, on a Mac): decoded by Blackmagic's own SDK, at the size the screen needs (half, quarter,
-  eighth for 4K to 12K clips), with its timecode, its sound, the camera's name, frame steps, In/Out, saved frames.
-- **Not yet**: REDCODE (R3D), ARRIRAW, Canon RAW, Nikon N-RAW, and BRAW on Windows. RoarPlay says which tool opens each.
+- **Blackmagic RAW** (.braw, on a Mac): decoded by Blackmagic's own SDK (6.0, every camera up to URSA Cine 17K and
+  PYXIS 12K), at the size the screen needs, with its timecode, its sound, the camera's name, frame steps, In/Out, saved
+  frames. Colour (Settings > Playing > Blackmagic RAW colour): Rec.709 (the default), the camera's LUT, or as shot.
+  Info shows the clip's gamma, gamut, LUT and the sizes it decodes at.
+- **REDCODE RAW** (.R3D, on a Mac, since 0.5.0): decoded by RED's own SDK (9.2.1), the same way: the size the screen
+  needs, timecode, sound, the camera's name.
+- **Not yet**: ARRIRAW, Canon RAW, Nikon N-RAW, and BRAW and R3D on Windows. RoarPlay says which tool opens each.
 
 What the computer decodes itself (H.264, HEVC, VP9, AV1; AAC, MP3, FLAC, Opus, WAV) plays as it is. Everything else is
 made playable by ffmpeg while it plays, on your own computer, with nothing written to disk: a picture the computer can
