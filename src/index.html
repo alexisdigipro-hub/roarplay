@@ -2,12 +2,12 @@
 <html lang="en">
 <head>
   <meta charset="utf-8" />
-  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' file: data:; media-src 'self' file: blob:; connect-src 'self' rp:; style-src 'self' 'unsafe-inline'" />
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' file: data: blob:; media-src 'self' file: blob: rp:; connect-src 'self' rp:; style-src 'self' 'unsafe-inline'" />
   <title>RoarPlay</title>
   <link rel="stylesheet" href="styles.css" />
 </head>
 <!-- English is the key of every text; the Greek is in renderer.js (EL). data-i18n: text, data-i18n-html: HTML,
-     data-i18n-label: aria-label and title. The queue, the info and the timecode are drawn by renderer.js. -->
+     data-i18n-label: aria-label and title. The queue, the info, the clock and the popovers are drawn by renderer.js. -->
 <body>
   <header class="top">
     <div class="wm"><span>ROAR</span><b>PLAY</b></div>
@@ -15,6 +15,7 @@
     <div class="spacer"></div>
     <button class="btn sm upd" id="update" hidden><span class="dot"></span><span data-i18n>Restart to update</span></button>
     <button class="btn sm" id="open"><svg viewBox="0 0 24 24"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg><span data-i18n>Open</span></button>
+    <button class="ib" id="openUrl" data-i18n-label="Open a web address (Cmd/Ctrl+U)" aria-label="Open a web address (Cmd/Ctrl+U)"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3a14 14 0 0 1 0 18M12 3a14 14 0 0 0 0 18"/></svg></button>
     <button class="ib" id="toggleSide" data-i18n-label="Queue and info" aria-label="Queue and info"><svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="3"/><path d="M15 4v16"/></svg></button>
     <button class="ib" id="openSettings" data-i18n-label="Settings" aria-label="Settings"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg></button>
   </header>
@@ -22,7 +23,11 @@
   <main>
     <section class="stage" id="stage">
       <div class="screen" id="screen">
-        <video id="v" preload="auto" playsinline></video>
+        <div class="pic" id="pic">
+          <video id="v" preload="auto" playsinline></video>
+          <div class="mask" id="mask" hidden></div>
+          <div class="subs" id="subs" hidden></div>
+        </div>
 
         <!-- nothing open yet -->
         <div class="home" id="home">
@@ -31,7 +36,7 @@
             <div class="drop-in">
               <div class="dz-i"><svg viewBox="0 0 24 24"><path d="M8 5.5v13l10.5-6.5z"/></svg></div>
               <h1 data-i18n-html>Plays <b>everything</b>.</h1>
-              <p data-i18n>Every video and every sound: ProRes, DNxHR, MXF, MKV, AVI, WAV, FLAC, AC3 and the rest. All on your own computer.</p>
+              <p data-i18n>Every video and every sound: ProRes, DNxHR, MXF, MKV, AVI, WAV, FLAC, AC3, image sequences and the rest. All on your own computer.</p>
               <button id="browse" class="btn main" data-i18n>Choose files</button>
               <small data-i18n>or drop files and folders anywhere</small>
             </div>
@@ -56,10 +61,13 @@
         <div class="bar" id="bar">
           <canvas id="wave"></canvas>
           <div class="buf" id="buf"></div>
+          <div class="chaps" id="chaps"></div>
           <div class="range" id="range" hidden></div>
           <div class="done" id="done"></div>
+          <button class="mark in" id="inMark" hidden data-i18n-label="In: click to clear" aria-label="In: click to clear"></button>
+          <button class="mark out" id="outMark" hidden data-i18n-label="Out: click to clear" aria-label="Out: click to clear"></button>
           <div class="head" id="head"></div>
-          <div class="tip" id="tip" hidden></div>
+          <div class="tip" id="tip" hidden><img id="tipImg" alt="" hidden><span id="tipText"></span></div>
         </div>
         <div class="row">
           <div class="clock">
@@ -74,17 +82,59 @@
             <button class="ib" id="fwd" data-i18n-label="Forward, faster each press (L)" aria-label="Forward, faster each press (L)"><svg viewBox="0 0 24 24"><path d="M13 6l8 6-8 6zM3 6l8 6-8 6z"/></svg></button>
             <button class="ib" id="stepFwd" data-i18n-label="One frame forward (Right arrow)" aria-label="One frame forward (Right arrow)"><svg viewBox="0 0 24 24"><path d="M18 6v12M6 6l9 6-9 6z"/></svg></button>
             <button class="ib" id="markOut" data-i18n-label="Mark out (O)" aria-label="Mark out (O)"><svg viewBox="0 0 24 24"><path d="M16 5v14M16 5h-5M16 19h-5"/></svg></button>
+            <button class="ib clear" id="clearIO" hidden data-i18n-label="Clear in and out (Alt+X)" aria-label="Clear in and out (Alt+X)"><svg viewBox="0 0 24 24"><path d="M5 5l14 14M19 5L5 19"/></svg></button>
           </div>
           <div class="tools">
             <button class="ib" id="loop" data-i18n-label="Loop (Cmd/Ctrl+L)" aria-label="Loop (Cmd/Ctrl+L)"><svg viewBox="0 0 24 24"><path d="M17 2l3 3-3 3"/><path d="M4 11V9a4 4 0 0 1 4-4h12M7 22l-3-3 3-3"/><path d="M20 13v2a4 4 0 0 1-4 4H4"/></svg></button>
-            <button class="ib" id="snap" data-i18n-label="Save this frame as PNG (Cmd/Ctrl+Shift+S)" aria-label="Save this frame as PNG (Cmd/Ctrl+Shift+S)"><svg viewBox="0 0 24 24"><path d="M4 8a2 2 0 0 1 2-2h2l1.5-2h5L16 6h2a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2z"/><circle cx="12" cy="12.5" r="3.5"/></svg></button>
+            <button class="ib txt" id="speedBtn" data-i18n-label="Speed" aria-label="Speed">1×</button>
+            <button class="ib" id="subsBtn" data-i18n-label="Subtitles (S)" aria-label="Subtitles (S)"><svg viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="M7 12h4M13 12h4M7 15.5h7"/></svg></button>
+            <button class="ib" id="pictureBtn" data-i18n-label="Picture: frame, aspect, look" aria-label="Picture: frame, aspect, look"><svg viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="M3 9h18M3 15h18" opacity=".5"/></svg></button>
+            <button class="ib" id="audioBtn" data-i18n-label="Sound: tracks, equalizer, output" aria-label="Sound: tracks, equalizer, output"><svg viewBox="0 0 24 24"><path d="M5 10v4M9 6v12M13 9v6M17 4v16M21 11v2"/></svg></button>
+            <button class="ib" id="snap" data-i18n-label="Save this frame as a picture (Cmd/Ctrl+Shift+S)" aria-label="Save this frame as a picture (Cmd/Ctrl+Shift+S)"><svg viewBox="0 0 24 24"><path d="M4 8a2 2 0 0 1 2-2h2l1.5-2h5L16 6h2a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2z"/><circle cx="12" cy="12.5" r="3.5"/></svg></button>
             <div class="vol">
               <button class="ib" id="mute" data-i18n-label="Sound on or off (M)" aria-label="Sound on or off (M)"><svg class="i-on" viewBox="0 0 24 24"><path d="M4 9.5h3.5L12 5.5v13l-4.5-4H4z"/><path d="M15.5 9a4 4 0 0 1 0 6M18 6.5a7.5 7.5 0 0 1 0 11"/></svg><svg class="i-off" viewBox="0 0 24 24"><path d="M4 9.5h3.5L12 5.5v13l-4.5-4H4z"/><path d="M16 9.5l5 5M21 9.5l-5 5"/></svg></button>
               <input type="range" id="volume" min="0" max="1" step="0.01" data-i18n-label="Volume" aria-label="Volume" />
             </div>
+            <button class="ib" id="pip" data-i18n-label="Picture in picture (P)" aria-label="Picture in picture (P)"><svg viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="14" rx="2"/><rect x="12" y="11" width="7" height="5" rx="1" fill="currentColor" stroke="none"/></svg></button>
+            <button class="ib" id="compact" data-i18n-label="Small bezel: only the picture (B)" aria-label="Small bezel: only the picture (B)"><svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="2"/><rect x="7" y="8" width="10" height="8" rx="1" opacity=".55"/></svg></button>
             <button class="ib" id="full" data-i18n-label="Full screen (F)" aria-label="Full screen (F)"><svg viewBox="0 0 24 24"><path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"/></svg></button>
           </div>
         </div>
+      </div>
+
+      <!-- the popovers: one open at a time, over the transport -->
+      <div class="pop" id="popSpeed" hidden>
+        <div class="pop-h" data-i18n>Speed</div>
+        <div class="chips" id="speedChips"><button data-v="0.25">0.25×</button><button data-v="0.5">0.5×</button><button data-v="0.75">0.75×</button><button data-v="1">1×</button><button data-v="1.25">1.25×</button><button data-v="1.5">1.5×</button><button data-v="2">2×</button><button data-v="3">3×</button><button data-v="4">4×</button></div>
+        <label class="check"><input type="checkbox" id="keepPitch" /><span><span data-i18n>Keep the voices' pitch</span></span></label>
+      </div>
+      <div class="pop" id="popSubs" hidden>
+        <div class="pop-h" data-i18n>Subtitles</div>
+        <div class="list" id="subsList"></div>
+        <div class="pop-row"><button class="btn sm" id="subsFile" data-i18n>Subtitle file…</button></div>
+        <div class="pop-row"><span data-i18n>Size</span><div class="seg sm" id="subSize"><button data-v="s" data-i18n>Small</button><button data-v="m" data-i18n>Normal</button><button data-v="l" data-i18n>Large</button></div></div>
+        <div class="pop-row"><span data-i18n>Delay</span><div class="stepper"><button class="ib" id="subEarlier">−</button><b id="subDelay">0.0 s</b><button class="ib" id="subLater">+</button></div></div>
+      </div>
+      <div class="pop" id="popPicture" hidden>
+        <div class="pop-h" data-i18n>Picture</div>
+        <div class="pop-row"><span data-i18n>Frame</span><div class="seg sm" id="fitMode"><button data-v="contain" data-i18n>Fit</button><button data-v="cover" data-i18n>Fill</button><button data-v="none">1:1</button></div></div>
+        <div class="pop-row"><span data-i18n>Aspect</span><div class="chips" id="aspectChips"><button data-v="0" data-i18n>Off</button><button data-v="2.39">2.39</button><button data-v="2">2.00</button><button data-v="1.85">1.85</button><button data-v="1.7778">16:9</button><button data-v="1.3333">4:3</button><button data-v="1">1:1</button><button data-v="0.8">4:5</button><button data-v="0.5625">9:16</button></div></div>
+        <div class="pop-row"><span data-i18n>Zoom</span><div class="chips" id="zoomChips"><button data-v="1">1×</button><button data-v="1.5">1.5×</button><button data-v="2">2×</button><button data-v="4">4×</button></div></div>
+        <div class="pop-row"><span data-i18n>Turn</span><div class="chips" id="rotChips"><button data-v="0">0°</button><button data-v="90">90°</button><button data-v="180">180°</button><button data-v="270">270°</button><button data-v="flipH" data-i18n>Mirror</button><button data-v="flipV" data-i18n>Upside down</button></div></div>
+        <div class="pop-row sl"><span data-i18n>Brightness</span><input type="range" id="brightness" min="0.5" max="1.5" step="0.01" /></div>
+        <div class="pop-row sl"><span data-i18n>Contrast</span><input type="range" id="contrast" min="0.5" max="1.5" step="0.01" /></div>
+        <div class="pop-row sl"><span data-i18n>Saturation</span><input type="range" id="saturation" min="0" max="2" step="0.01" /></div>
+        <div class="pop-row"><button class="btn sm" id="pictureReset" data-i18n>Reset the picture</button><span class="spacer"></span>
+          <label class="check"><input type="checkbox" id="followPic" /><span><span data-i18n>Window takes the picture's shape</span></span></label></div>
+      </div>
+      <div class="pop" id="popAudio" hidden>
+        <div class="pop-h" data-i18n>Sound</div>
+        <div class="list" id="tracksList"></div>
+        <div class="pop-row"><span data-i18n>Hear</span><div class="chips" id="chanChips"><button data-v="stereo" data-i18n>Stereo</button><button data-v="left" data-i18n>Left</button><button data-v="right" data-i18n>Right</button><button data-v="mono" data-i18n>Mono</button><button data-v="swap" data-i18n>Swapped</button></div></div>
+        <div class="pop-row"><span data-i18n>Delay</span><div class="stepper"><button class="ib" id="audEarlier">−</button><b id="audDelay">0 ms</b><button class="ib" id="audLater">+</button></div></div>
+        <div class="pop-row"><span data-i18n>Output</span><select id="outDevice"></select></div>
+        <div class="pop-row eq-head"><span data-i18n>Equalizer</span><div class="chips" id="eqPresets"><button data-v="flat" data-i18n>Flat</button><button data-v="voice" data-i18n>Voice</button><button data-v="bass" data-i18n>Bass</button><button data-v="bright" data-i18n>Bright</button></div></div>
+        <div class="eq" id="eq"></div>
       </div>
     </section>
 
@@ -95,16 +145,30 @@
       <div class="side-body" id="queueBox">
         <ol class="queue" id="queue"></ol>
         <div class="empty" id="queueEmpty" data-i18n>Drop files or folders to line them up.</div>
-        <div class="side-foot"><button class="btn sm" id="addMore"><svg viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg><span data-i18n>Add</span></button><span class="spacer"></span><button class="btn sm" id="clearQueue" data-i18n>Clear</button></div>
+        <div class="side-foot">
+          <button class="btn sm" id="addMore"><svg viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg><span data-i18n>Add</span></button>
+          <button class="ib" id="shuffle" data-i18n-label="Shuffle" aria-label="Shuffle"><svg viewBox="0 0 24 24"><path d="M3 7h4l10 10h4M17 3l4 4-4 4M3 17h4l2.5-2.5M14.5 9.5L17 7h4M17 13l4 4-4 4"/></svg></button>
+          <button class="ib" id="saveList" data-i18n-label="Save the list as M3U" aria-label="Save the list as M3U"><svg viewBox="0 0 24 24"><path d="M5 4h10l4 4v12H5z"/><path d="M8 4v5h7M8 20v-6h8v6"/></svg></button>
+          <span class="spacer"></span><button class="btn sm" id="clearQueue" data-i18n>Clear</button></div>
       </div>
       <div class="side-body" id="infoBox" hidden>
         <div class="facts" id="facts"></div>
+        <div class="side-foot"><button class="btn sm" id="copyInfo"><svg viewBox="0 0 24 24"><rect x="8" y="8" width="12" height="12" rx="2"/><path d="M16 8V6a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2h2"/></svg><span data-i18n>Copy all</span></button><span class="spacer"></span><button class="btn sm" id="revealFile" data-i18n>Show in the folder</button></div>
       </div>
     </aside>
   </main>
   <div class="toast" id="toast" hidden></div>
 
-  <!-- Settings: the language, what happens at the end of a file, the updates, the keys. Cmd/Ctrl+, opens it too. -->
+  <!-- the bezel's own small controls: shown when the mouse comes -->
+  <div class="bezel-bar" id="bezelBar" hidden>
+    <button class="ib" id="bzPlay" aria-label="Play"><svg class="i-play" viewBox="0 0 24 24"><path d="M8 5.5v13l10.5-6.5z"/></svg><svg class="i-pause" viewBox="0 0 24 24"><path d="M8 5v14M16 5v14"/></svg></button>
+    <span class="bz-tc" id="bzTc"></span>
+    <span class="spacer"></span>
+    <button class="ib" id="bzTop" data-i18n-label="Always on top" aria-label="Always on top"><svg viewBox="0 0 24 24"><path d="M12 3v12M6 9l6-6 6 6M5 21h14"/></svg></button>
+    <button class="ib" id="bzBack" data-i18n-label="Back to the full window (B)" aria-label="Back to the full window (B)"><svg viewBox="0 0 24 24"><path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"/></svg></button>
+  </div>
+
+  <!-- Settings: the language, playing, the window, pictures, updates, the keys. Cmd/Ctrl+, opens it too. -->
   <div class="veil" id="settings" hidden>
     <div class="sheet" role="dialog" aria-modal="true" aria-labelledby="setTitle">
       <div class="set-head"><h3 id="setTitle" data-i18n>Settings</h3><button class="ib" id="closeSettings" data-i18n-label="Close" aria-label="Close"><svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></svg></button></div>
@@ -121,6 +185,31 @@
           <div class="seg" id="atEnd"><button data-v="stop" data-i18n>Stop</button><button data-v="next" data-i18n>Next</button><button data-v="repeat" data-i18n>Repeat</button></div></div>
         <div class="set-row"><span><span data-i18n>The clock shows</span></span>
           <div class="seg" id="clockMode"><button data-v="tc" data-i18n>Timecode</button><button data-v="time" data-i18n>Time</button><button data-v="frames" data-i18n>Frames</button></div></div>
+        <div class="set-row"><span><span data-i18n>Picture made on the fly</span><small data-i18n>ProRes, DNxHR, MXF and the rest are made H.264 while they play. 1080p is smooth on every computer; Full keeps the size and asks much more of it.</small></span>
+          <div class="seg" id="playQuality"><button data-v="1080">1080p</button><button data-v="0" data-i18n>Full</button></div></div>
+        <div class="set-row"><span><span data-i18n>Image sequences play at</span></span>
+          <div class="seg" id="seqFps"><button data-v="24">24</button><button data-v="25">25</button><button data-v="30">30</button></div></div>
+        <label class="check"><input type="checkbox" id="resume" /><span><span data-i18n>Go on where you left off</span><small data-i18n>A file you had stopped in the middle opens there again.</small></span></label>
+      </div>
+
+      <div class="label" data-i18n>Window</div>
+      <div class="set-box">
+        <label class="check"><input type="checkbox" id="followPic2" /><span><span data-i18n>Window takes the picture's shape</span><small data-i18n>On opening, and when you resize it.</small></span></label>
+        <label class="check"><input type="checkbox" id="onTop" /><span><span data-i18n>Always on top</span><small data-i18n>Stays over the other windows.</small></span></label>
+      </div>
+
+      <div class="label" data-i18n>Saved frames</div>
+      <div class="set-box">
+        <div class="set-row"><span><span data-i18n>Format</span></span>
+          <div class="seg" id="snapFormat"><button data-v="png">PNG</button><button data-v="jpg">JPG</button></div></div>
+        <div class="set-row"><span><span data-i18n>Saved to</span><small id="snapDirText"></small></span>
+          <div class="seg" id="snapWhere"><button data-v="beside" data-i18n>Beside the file</button><button data-v="desktop" data-i18n>Desktop</button><button data-v="folder" data-i18n>A folder…</button></div></div>
+      </div>
+
+      <div class="label" data-i18n>Open with RoarPlay</div>
+      <div class="set-box">
+        <div class="set-row"><span><span data-i18n>Double-clicking a file opens it in RoarPlay</span><small id="defaultsText"></small></span>
+          <button class="btn sm" id="defaultVideo" data-i18n>Video</button><button class="btn sm" id="defaultAudio" data-i18n>Sound</button></div>
       </div>
 
       <div class="label" data-i18n>Updates</div>
@@ -133,6 +222,16 @@
 
       <div class="label" data-i18n>Keys</div>
       <div class="set-box keys-list" id="keysList"></div>
+    </div>
+  </div>
+
+  <!-- a web address -->
+  <div class="veil" id="urlVeil" hidden>
+    <div class="sheet ask" role="dialog" aria-modal="true">
+      <h3 data-i18n>Open a web address</h3>
+      <p data-i18n>A direct link to a video or sound file (http or https). Pages like YouTube are not links to files: RoarGrab saves those.</p>
+      <input type="text" id="urlField" placeholder="https://…" spellcheck="false" />
+      <div class="ask-row"><button class="btn sm" id="urlCancel" data-i18n>Cancel</button><button class="btn sm main" id="urlGo" data-i18n>Open</button></div>
     </div>
   </div>
 

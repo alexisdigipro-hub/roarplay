@@ -7,5 +7,11 @@ const path = require('path')
 exports.default = async function (context) {
   if (context.electronPlatformName !== 'darwin') return
   const app = path.join(context.appOutDir, `${context.packager.appInfo.productFilename}.app`)
+  // the helper and ffmpeg in Resources/bin are not where --deep looks, so they are signed first, by name
+  const fs = require('fs')
+  for (const f of ['setdefault', 'ffmpeg']) {
+    const p = path.join(app, 'Contents', 'Resources', 'bin', f)
+    if (fs.existsSync(p)) execFileSync('codesign', ['--force', '--sign', '-', p], { stdio: 'inherit' })
+  }
   execFileSync('codesign', ['--force', '--deep', '--sign', '-', app], { stdio: 'inherit' })
 }

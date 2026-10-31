@@ -26,6 +26,9 @@ jobs:
         with:
           node-version: 22
       - run: npm install --no-audit --no-fund
+      # the Mac helper that makes RoarPlay the app for a file kind (helper/setdefault.swift), universal
+      - if: runner.os == 'macOS'
+        run: npm run helper
       # GitHub's Macs sometimes fail to make a .dmg ("hdiutil: resource busy"): up to three tries
       - if: runner.os == 'macOS'
         shell: bash

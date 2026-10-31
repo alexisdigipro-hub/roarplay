@@ -26,8 +26,16 @@ goes through `t()` or a data-i18n attribute and gets its Greek.
   `npm install`); packaged as `resources/bin/ffmpeg`. The Mac build makes arm64 and x64 from one machine.
 - Look: RoarMail's Simba as the other Lab apps (floating graphite glass cards, red #d40000 that glows, the chosen thing
   lit from inside, 12px corners, Jost wordmark from src/fonts). Keep it in step with RoarMorph's theme.css.
-- Settings (the gear, Cmd/Ctrl+,): language, what happens at the end of a file, what the clock shows, updates, the keys.
-  New settings go there, as a DEFAULTS key in renderer.js.
+- Settings (the gear, Cmd/Ctrl+,): language, what happens at the end of a file, what the clock shows, playing quality
+  (1080p or full), sequence fps, resume, the window, saved frames, Open with RoarPlay, updates, the keys. New settings go
+  there, as a DEFAULTS key in renderer.js.
+- 0.2.0 (Alex, 31 Oct, from the players' comparison): subtitles (media.js subtitles -> WebVTT, drawn by the page in #subs,
+  tracks inside and files beside), speed with pitch kept, chapters, the Picture popover (fit/fill/1:1, aspect mask #mask,
+  zoom, turn, look as CSS filter; the window takes the picture's shape through main.js 'fit' = setAspectRatio), the Sound
+  popover (Web Audio graph in renderer.js audioStart: channel gains, delay, 10 biquads; output device by setSinkId),
+  resume positions, the queue kept and as M3U, thumbnails on the bar (media.js thumb), image sequences (media.js
+  sequenceOf / inputArgs), web addresses, picture in picture, always on top, the small bezel (body.compact, main.js
+  'compact'), full Info (media.js parseDetail), Open with RoarPlay (helper/setdefault.swift built in CI, Resources/bin).
 - Releases: bump `version` in package.json, tag `vX.Y.Z`, push the tag (.github/workflows/desktop.yml); the release's
   files are the download links (themadlions.com/lab/roarplay/) and what src/updater.js looks at.
 - Work on a branch, open a PR, wait for the green check (.github/workflows/check.yml), merge it yourself.
