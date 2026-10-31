@@ -10,7 +10,7 @@ const DEFAULTS = {
   fitMode: 'contain', aspect: 0, zoom: 1, rot: 0, flipH: false, flipV: false, brightness: 1, contrast: 1, saturation: 1, followPic: true, onTop: false,
   playQuality: 1080, seqFps: 24, resume: true, snapFormat: 'png', snapWhere: 'beside', snapDir: '',
   chan: 'stereo', audDelay: 0, outDevice: '', eq: [0, 0, 0, 0, 0, 0, 0, 0, 0, 0], shuffle: false,
-  scopeKind: 'waveform', keyTicks: false, lutFile: '', lutMix: 1, cmpMode: 'wipe',
+  scopeKind: 'waveform', keyTicks: false, lutFile: '', lutMix: 1, cmpMode: 'wipe', quiet: true,
 };
 let S = { ...DEFAULTS };
 try { S = { ...DEFAULTS, ...JSON.parse(localStorage.getItem('settings') || '{}') }; } catch {}
@@ -80,6 +80,10 @@ const EL = {
   'Black': 'Μαύρο', 'Frozen': 'Παγωμένο', 'Silence': 'Σιωπή', 'Decode error': 'Σφάλμα αποκωδικοποίησης', 'Missing frames': 'Χαμένα καρέ',
   'Rating': 'Βαθμολογία', 'Markers': 'Markers', 'N adds one at the frame on screen': 'Το N βάζει έναν στο καρέ που βλέπεις', 'No markers yet.': 'Κανένας marker ακόμα.',
   'Choose a .cube…': 'Διάλεξε ένα .cube…', 'LUT amount': 'Ποσότητα LUT', 'Compare': 'Σύγκριση', 'Second file…': 'Δεύτερο αρχείο…', 'Wipe': 'Wipe', 'Side by side': 'Δίπλα δίπλα', 'The second file cannot be played here': 'Το δεύτερο αρχείο δεν παίζει εδώ',
+  'Open files (Cmd/Ctrl+O)': 'Άνοιγμα αρχείων (Cmd/Ctrl+O)', 'More tools': 'Περισσότερα εργαλεία', 'Only the picture while it plays': 'Μόνο η εικόνα όσο παίζει',
+  'The controls fade when the mouse rests, and come back when it moves.': 'Τα κουμπιά σβήνουν όταν ηρεμεί το ποντίκι και γυρίζουν όταν κουνηθεί.',
+  'Tick the kinds you want, then Apply once. The Mac asks you to confirm each kind, so tick only what you need.': 'Τσέκαρε τα είδη που θες και πάτα Apply μία φορά. Το Mac ζητά επιβεβαίωση για κάθε είδος, γι\' αυτό τσέκαρε μόνο όσα χρειάζεσαι.',
+  'all': 'όλα', 'none': 'κανένα', 'Apply': 'Εφαρμογή',
   'Centre only': 'Μόνο το κέντρο', 'Surrounds only': 'Μόνο τα surround', 'Add a marker': 'Βάλε marker', 'Rating 1 to 5': 'Βαθμολογία 1 ως 5',
 };
 const t = (en, vars = {}) => {
@@ -603,6 +607,7 @@ function paint(force) {
   const pct = d ? Math.min(1, tm / d) : 0;
   EL_done.style.width = `${pct * 100}%`;
   EL_head.style.left = `${pct * 100}%`;
+  if (document.body.classList.contains('compact')) $('#bzDone').style.width = `${pct * 100}%`;
   // what has arrived, from the playhead on
   if (cur && d && v.buffered.length) {
     let end = 0;
@@ -777,7 +782,8 @@ function applySubSize() { document.body.classList.toggle('sub-s', S.subSize === 
 
 // ---------- The picture: frame, aspect, zoom, turn, look; the window's shape ----------
 function applyPicture() {
-  v.style.objectFit = S.fitMode;
+  // with an aspect chosen and the window shaped by it, the picture fills that frame (unless 1:1 was asked)
+  v.style.objectFit = +S.aspect && windowFollows() && S.fitMode !== 'none' ? 'cover' : S.fitMode;
   const tf = [`rotate(${S.rot}deg)`, `scale(${(S.flipH ? -1 : 1) * S.zoom}, ${(S.flipV ? -1 : 1) * S.zoom})`];
   v.style.transform = tf.join(' ');
   v.style.filter = S.brightness !== 1 || S.contrast !== 1 || S.saturation !== 1 ? `brightness(${S.brightness}) contrast(${S.contrast}) saturate(${S.saturation})` : '';
@@ -789,10 +795,13 @@ function applyPicture() {
   if (typeof B !== 'undefined' && B.cur) { B.v.style.transform = v.style.transform; B.v.style.filter = v.style.filter; B.v.style.objectFit = S.fitMode; }
 }
 // the aspect mask: dark bands over what falls outside the chosen frame, on the picture as it is shown
+// the window follows the chosen aspect (Alex, 31 Oct: "the aspect ratio changes the window's shape"); the mask is
+// for when it cannot: full screen, the bezel, or the window not following the picture
+const windowFollows = () => S.followPic && !document.fullscreenElement && !document.body.classList.contains('compact');
 function placeMask() {
   const m = $('#mask');
   const ratio = +S.aspect;
-  if (!ratio || !cur || !hasPicture() || !v.videoWidth) { m.hidden = true; return; }
+  if (!ratio || !cur || !hasPicture() || !v.videoWidth || windowFollows()) { m.hidden = true; return; }
   const box = $('#pic').getBoundingClientRect();
   const vr = v.videoWidth / v.videoHeight;
   // where the picture sits inside the box (Fit): the mask is cut from that
@@ -811,14 +820,15 @@ function fitWindow(resize) {
   const extra = { width: window.innerWidth - box.width, height: window.innerHeight - box.height };
   let ratio = v.videoWidth / v.videoHeight;
   if (S.rot % 180) ratio = 1 / ratio;
+  if (+S.aspect) ratio = +S.aspect;
   window.api.fit({ ratio, extra, resize });
 }
 v.addEventListener('loadedmetadata', () => { if (cur && hasPicture()) setTimeout(() => fitWindow(true), 50); });
 function resetPicture() { Object.assign(S, { fitMode: 'contain', aspect: 0, zoom: 1, rot: 0, flipH: false, flipV: false, brightness: 1, contrast: 1, saturation: 1 }); save(); applyPicture(); fitWindow(false); }
 $('#pictureReset').addEventListener('click', resetPicture);
 for (const k of ['brightness', 'contrast', 'saturation']) $('#' + k).addEventListener('input', (e) => { S[k] = +e.target.value; save(); applyPicture(); });
-$('#followPic').addEventListener('input', (e) => { S.followPic = e.target.checked; $('#followPic2').checked = S.followPic; save(); fitWindow(true); });
-$('#followPic2').addEventListener('input', (e) => { S.followPic = e.target.checked; $('#followPic').checked = S.followPic; save(); fitWindow(true); });
+$('#followPic').addEventListener('input', (e) => { S.followPic = e.target.checked; $('#followPic2').checked = S.followPic; save(); fitWindow(true); applyPicture(); });
+$('#followPic2').addEventListener('input', (e) => { S.followPic = e.target.checked; $('#followPic').checked = S.followPic; save(); fitWindow(true); applyPicture(); });
 $('#onTop').addEventListener('input', (e) => { S.onTop = e.target.checked; save(); window.api.onTop(S.onTop); $('#bzTop').classList.toggle('on', S.onTop); });
 
 // ---------- Sound: tracks, what you hear, delay, output, equalizer (Web Audio) ----------
@@ -910,14 +920,15 @@ function setMuted(m) { S.muted = m; v.muted = m; setBody('muted', m); save(); }
 $('#volume').addEventListener('input', (e) => { setVolume(+e.target.value); if (S.muted) setMuted(false); });
 $('#mute').addEventListener('click', () => setMuted(!S.muted));
 function toggleFull() { if (document.fullscreenElement) document.exitFullscreen(); else $('#stage').requestFullscreen().catch(() => {}); }
-document.addEventListener('fullscreenchange', () => { setTimeout(() => { placeMask(); fitWindow(false); }, 100); });
+document.addEventListener('fullscreenchange', () => { setTimeout(() => { applyPicture(); fitWindow(false); }, 100); });
 function togglePip() { if (!cur || !hasPicture()) return; if (document.pictureInPictureElement) document.exitPictureInPicture(); else v.requestPictureInPicture().catch(() => {}); }
 let idleTimer = 0;
 document.addEventListener('mousemove', () => {
-  $('#stage').classList.remove('idle'); document.body.classList.remove('idle'); document.body.classList.add('show-bar');
+  $('#stage').classList.remove('idle'); document.body.classList.remove('idle'); document.body.classList.remove('idle-ui'); document.body.classList.add('show-bar');
   clearTimeout(idleTimer);
   idleTimer = setTimeout(() => {
     if (document.fullscreenElement && !v.paused) $('#stage').classList.add('idle');
+    if (!v.paused && !Object.values(POPS).some((id) => !$('#' + id).hidden) && $('#settings').hidden && !document.querySelector('.side:hover')) document.body.classList.add('idle-ui');
     if (document.body.classList.contains('compact')) { document.body.classList.remove('show-bar'); if (!v.paused) document.body.classList.add('idle'); }
   }, 2200);
 });
@@ -934,9 +945,10 @@ function setCompact(on) {
   closePops();
   window.api.compact(on);
   showSide();
-  setTimeout(() => { placeMask(); fitWindow(true); EL_bzTc.textContent = lastClock; }, 60);
+  setTimeout(() => { applyPicture(); fitWindow(true); EL_bzTc.textContent = lastClock; }, 60);
 }
 $('#bzPlay').addEventListener('click', togglePlay);
+$('#bzBar').addEventListener('pointerdown', (e) => { if (!cur) return; const r = $('#bzBar').getBoundingClientRect(); seek(Math.max(0, Math.min(1, (e.clientX - r.left) / r.width)) * duration()); });
 $('#bzBack').addEventListener('click', () => setCompact(false));
 $('#bzTop').addEventListener('click', () => { S.onTop = !S.onTop; save(); $('#onTop').checked = S.onTop; window.api.onTop(S.onTop); $('#bzTop').classList.toggle('on', S.onTop); });
 
@@ -1058,7 +1070,7 @@ for (const seg of $$('.seg')) {
   });
 }
 $('#speedChips').addEventListener('click', (e) => { const b = e.target.closest('button[data-v]'); if (b) setSpeed(+b.dataset.v); });
-$('#aspectChips').addEventListener('click', (e) => { const b = e.target.closest('button[data-v]'); if (b) { S.aspect = +b.dataset.v; save(); applyPicture(); } });
+$('#aspectChips').addEventListener('click', (e) => { const b = e.target.closest('button[data-v]'); if (b) { S.aspect = +b.dataset.v; save(); applyPicture(); fitWindow(true); setTimeout(applyPicture, 80); } });
 $('#zoomChips').addEventListener('click', (e) => { const b = e.target.closest('button[data-v]'); if (b) { S.zoom = +b.dataset.v; save(); applyPicture(); } });
 $('#rotChips').addEventListener('click', (e) => {
   const b = e.target.closest('button[data-v]'); if (!b) return;
@@ -1184,13 +1196,28 @@ $('#openUrl').addEventListener('click', () => urlOpen(true));
 $('#urlCancel').addEventListener('click', () => urlOpen(false));
 $('#urlGo').addEventListener('click', urlGo);
 $('#urlVeil').addEventListener('click', (e) => { if (e.target.id === 'urlVeil') urlOpen(false); });
-// Open with RoarPlay
-for (const [id, kind] of [['defaultVideo', 'video'], ['defaultAudio', 'audio']]) {
-  $('#' + id).addEventListener('click', async () => {
-    const r = await window.api.setDefault(kind);
-    $('#defaultsText').textContent = r.opened ? t('Pick RoarPlay in the window that opened.') : r.ok ? t('RoarPlay now opens {n} kinds of file.', { n: r.done }) : `${t('It could not be set')}: ${r.error || r.detail || ''}`;
-  });
-}
+// Open with RoarPlay: the kinds to tick, kept between sessions, applied with one press
+const COMMON = ['mp4', 'mov', 'mkv', 'mxf', 'avi', 'mp3', 'wav', 'aiff', 'flac', 'm4a'];
+window.api.fileKinds().then((k) => {
+  const ticked = new Set(fetchStore('defaultExts', COMMON));
+  for (const [id, list] of [['extsVideo', k.video], ['extsAudio', k.audio]]) $('#' + id).innerHTML = list.map((e) => `<label><input type="checkbox" value="${e}" ${ticked.has(e) ? 'checked' : ''}>${e}</label>`).join('');
+});
+const tickedExts = () => $$('.exts input:checked').map((i) => i.value);
+document.addEventListener('change', (e) => { if (e.target.closest('.exts')) store('defaultExts', tickedExts()); });
+document.addEventListener('click', (e) => {
+  const b = e.target.closest('.lnk'); if (!b) return;
+  const box = b.dataset.all ? '#exts' + (b.dataset.all === 'video' ? 'Video' : 'Audio') : '#exts' + (b.dataset.none === 'video' ? 'Video' : 'Audio');
+  for (const i of $$(box + ' input')) i.checked = !!b.dataset.all;
+  store('defaultExts', tickedExts());
+});
+$('#defaultApply').addEventListener('click', async () => {
+  const r = await window.api.setDefault(tickedExts());
+  $('#defaultsText').textContent = r.opened ? t('Pick RoarPlay in the window that opened.') : r.ok ? t('RoarPlay now opens {n} kinds of file.', { n: r.done }) : `${t('It could not be set')}: ${r.error || r.detail || ''}`;
+});
+// the tools behind the ⋯ button; the controls fade while it plays and the mouse rests
+$('#moreBtn').addEventListener('click', (e) => { e.stopPropagation(); setBody('more-open', !document.body.classList.contains('more-open')); placeLenses(); });
+$('#quiet').checked = S.quiet; setBody('quiet', S.quiet);
+$('#quiet').addEventListener('input', (e) => { S.quiet = e.target.checked; save(); setBody('quiet', S.quiet); });
 
 // ---------- Drop anywhere ----------
 let dragDepth = 0;
@@ -1225,7 +1252,7 @@ function showUpdate(u) {
     : upd.checkedAt ? t('Up to date · looked at {time}', { time: clock(upd.checkedAt) })
     : S.autoUpdate ? t('Up to date. It looks by itself.') : t('Up to date.');
 }
-window.api.version().then((x) => { appVersion = x || ''; $('#ver').textContent = x ? `v${x}` : ''; showUpdate(); }).catch(() => {});
+window.api.version().then((x) => { appVersion = x || ''; $('#ver2').textContent = x ? `v${x}` : ''; showUpdate(); }).catch(() => {});
 window.api.update.state().then(showUpdate);
 window.api.update.on(showUpdate);
 window.api.update.auto(S.autoUpdate);

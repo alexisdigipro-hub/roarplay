@@ -40,9 +40,10 @@ these is happening.
   named but cannot be shown.
 - **Speed** 0.25× to 4× (the 1× button, or [ and ], \ for normal), the voices keeping their pitch.
 - **Chapters**: ticks on the bar with their names, Page Up and Page Down, the list in Info.
-- **Picture** (the frame button): Fit, Fill or 1:1; an aspect mask (2.39, 2.00, 1.85, 16:9, 4:3, 1:1, 4:5, 9:16) that darkens
-  what falls outside the frame without cutting; zoom; turn, mirror, upside down; brightness, contrast, saturation.
-  The window takes the picture's shape when a file opens and keeps it while you resize (can be turned off).
+- **Picture** (the frame button, behind ⋯): Fit, Fill or 1:1; an aspect (2.39, 2.00, 1.85, 16:9, 4:3, 1:1, 4:5, 9:16) that
+  reshapes the window itself and fills it with the picture (in full screen or the bezel, dark bands show the frame instead);
+  zoom; turn, mirror, upside down; brightness, contrast, saturation. The window takes the picture's shape when a file
+  opens and keeps it while you resize (can be turned off).
 - **Sound** (the bars button): the sound track; what you hear (stereo, left only, right only, mono, swapped); a delay in
   50 ms steps; the output device; a ten-band equalizer with presets.
 - **Sound files** show the album picture, the title and the artist, and a waveform you can scrub.
@@ -57,8 +58,11 @@ these is happening.
 - **Small bezel** (B, or the bezel button): only the picture inside a thin frame, no bars; a small bar with play, the
   clock, Always on top and the way back comes when the mouse moves. Picture in picture with P.
 - **Full screen** with F or a double click; the controls hide when the mouse rests.
-- **Open with RoarPlay** (Settings): make RoarPlay the app for video or sound files (on Windows the system's Default apps
-  page opens, where you pick RoarPlay).
+- **Minimal by default**: the row shows the clock, In and Out, the frame steps, J, play, L, the volume, the bezel and full
+  screen; everything else (loop, speed, subtitles, picture, sound, the saved frame, picture in picture) sits behind ⋯.
+  While a file plays and the mouse rests, every control fades and only the picture stays (Settings > Window).
+- **Open with RoarPlay** (Settings): tick the kinds of file (the common ones are ticked) and press Apply once; the Mac
+  confirms each kind. On Windows the system's Default apps page opens, where you pick RoarPlay.
 
 ## The professional side (Scopes and Notes tabs)
 

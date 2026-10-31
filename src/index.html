@@ -11,10 +11,10 @@
 <body>
   <header class="top">
     <div class="wm"><span>ROAR</span><b>PLAY</b></div>
-    <span class="ver" id="ver"></span>
+    <span class="ver" id="ver" hidden></span>
     <div class="spacer"></div>
     <button class="btn sm upd" id="update" hidden><span class="dot"></span><span data-i18n>Restart to update</span></button>
-    <button class="btn sm" id="open"><svg viewBox="0 0 24 24"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg><span data-i18n>Open</span></button>
+    <button class="ib" id="open" data-i18n-label="Open files (Cmd/Ctrl+O)" aria-label="Open files (Cmd/Ctrl+O)"><svg viewBox="0 0 24 24"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg></button>
     <button class="ib" id="openUrl" data-i18n-label="Open a web address (Cmd/Ctrl+U)" aria-label="Open a web address (Cmd/Ctrl+U)"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3a14 14 0 0 1 0 18M12 3a14 14 0 0 0 0 18"/></svg></button>
     <button class="ib" id="toggleSide" data-i18n-label="Queue and info" aria-label="Queue and info"><svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="3"/><path d="M15 4v16"/></svg></button>
     <button class="ib" id="openSettings" data-i18n-label="Settings" aria-label="Settings"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg></button>
@@ -88,17 +88,20 @@
             <button class="ib clear" id="clearIO" hidden data-i18n-label="Clear in and out (Alt+X)" aria-label="Clear in and out (Alt+X)"><svg viewBox="0 0 24 24"><path d="M5 5l14 14M19 5L5 19"/></svg></button>
           </div>
           <div class="tools">
+            <div class="tools-more" id="toolsMore">
             <button class="ib" id="loop" data-i18n-label="Loop (Cmd/Ctrl+L)" aria-label="Loop (Cmd/Ctrl+L)"><svg viewBox="0 0 24 24"><path d="M17 2l3 3-3 3"/><path d="M4 11V9a4 4 0 0 1 4-4h12M7 22l-3-3 3-3"/><path d="M20 13v2a4 4 0 0 1-4 4H4"/></svg></button>
             <button class="ib txt" id="speedBtn" data-i18n-label="Speed" aria-label="Speed">1×</button>
             <button class="ib" id="subsBtn" data-i18n-label="Subtitles (S)" aria-label="Subtitles (S)"><svg viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="M7 12h4M13 12h4M7 15.5h7"/></svg></button>
             <button class="ib" id="pictureBtn" data-i18n-label="Picture: frame, aspect, look" aria-label="Picture: frame, aspect, look"><svg viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="M3 9h18M3 15h18" opacity=".5"/></svg></button>
             <button class="ib" id="audioBtn" data-i18n-label="Sound: tracks, equalizer, output" aria-label="Sound: tracks, equalizer, output"><svg viewBox="0 0 24 24"><path d="M5 10v4M9 6v12M13 9v6M17 4v16M21 11v2"/></svg></button>
             <button class="ib" id="snap" data-i18n-label="Save this frame as a picture (Cmd/Ctrl+Shift+S)" aria-label="Save this frame as a picture (Cmd/Ctrl+Shift+S)"><svg viewBox="0 0 24 24"><path d="M4 8a2 2 0 0 1 2-2h2l1.5-2h5L16 6h2a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2z"/><circle cx="12" cy="12.5" r="3.5"/></svg></button>
+            <button class="ib" id="pip" data-i18n-label="Picture in picture (P)" aria-label="Picture in picture (P)"><svg viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="14" rx="2"/><rect x="12" y="11" width="7" height="5" rx="1" fill="currentColor" stroke="none"/></svg></button>
+            </div>
+            <button class="ib" id="moreBtn" data-i18n-label="More tools" aria-label="More tools"><svg viewBox="0 0 24 24"><circle cx="5" cy="12" r="1.6" fill="currentColor" stroke="none"/><circle cx="12" cy="12" r="1.6" fill="currentColor" stroke="none"/><circle cx="19" cy="12" r="1.6" fill="currentColor" stroke="none"/></svg></button>
             <div class="vol">
               <button class="ib" id="mute" data-i18n-label="Sound on or off (M)" aria-label="Sound on or off (M)"><svg class="i-on" viewBox="0 0 24 24"><path d="M4 9.5h3.5L12 5.5v13l-4.5-4H4z"/><path d="M15.5 9a4 4 0 0 1 0 6M18 6.5a7.5 7.5 0 0 1 0 11"/></svg><svg class="i-off" viewBox="0 0 24 24"><path d="M4 9.5h3.5L12 5.5v13l-4.5-4H4z"/><path d="M16 9.5l5 5M21 9.5l-5 5"/></svg></button>
               <input type="range" id="volume" min="0" max="1" step="0.01" data-i18n-label="Volume" aria-label="Volume" />
             </div>
-            <button class="ib" id="pip" data-i18n-label="Picture in picture (P)" aria-label="Picture in picture (P)"><svg viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="14" rx="2"/><rect x="12" y="11" width="7" height="5" rx="1" fill="currentColor" stroke="none"/></svg></button>
             <button class="ib" id="compact" data-i18n-label="Small bezel: only the picture (B)" aria-label="Small bezel: only the picture (B)"><svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="2"/><rect x="7" y="8" width="10" height="8" rx="1" opacity=".55"/></svg></button>
             <button class="ib" id="full" data-i18n-label="Full screen (F)" aria-label="Full screen (F)"><svg viewBox="0 0 24 24"><path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"/></svg></button>
           </div>
@@ -214,7 +217,7 @@
   <div class="bezel-bar" id="bezelBar" hidden>
     <button class="ib" id="bzPlay" aria-label="Play"><svg class="i-play" viewBox="0 0 24 24"><path d="M8 5.5v13l10.5-6.5z"/></svg><svg class="i-pause" viewBox="0 0 24 24"><path d="M8 5v14M16 5v14"/></svg></button>
     <span class="bz-tc" id="bzTc"></span>
-    <span class="spacer"></span>
+    <div class="bz-bar" id="bzBar"><i id="bzDone"></i></div>
     <button class="ib" id="bzTop" data-i18n-label="Always on top" aria-label="Always on top"><svg viewBox="0 0 24 24"><path d="M12 3v12M6 9l6-6 6 6M5 21h14"/></svg></button>
     <button class="ib" id="bzBack" data-i18n-label="Back to the full window (B)" aria-label="Back to the full window (B)"><svg viewBox="0 0 24 24"><path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"/></svg></button>
   </div>
@@ -246,6 +249,7 @@
       <div class="label" data-i18n>Window</div>
       <div class="set-box">
         <label class="check"><input type="checkbox" id="followPic2" /><span><span data-i18n>Window takes the picture's shape</span><small data-i18n>On opening, and when you resize it.</small></span></label>
+        <label class="check"><input type="checkbox" id="quiet" /><span><span data-i18n>Only the picture while it plays</span><small data-i18n>The controls fade when the mouse rests, and come back when it moves.</small></span></label>
         <label class="check"><input type="checkbox" id="onTop" /><span><span data-i18n>Always on top</span><small data-i18n>Stays over the other windows.</small></span></label>
       </div>
 
@@ -259,14 +263,18 @@
 
       <div class="label" data-i18n>Open with RoarPlay</div>
       <div class="set-box">
-        <div class="set-row"><span><span data-i18n>Double-clicking a file opens it in RoarPlay</span><small id="defaultsText"></small></span>
-          <button class="btn sm" id="defaultVideo" data-i18n>Video</button><button class="btn sm" id="defaultAudio" data-i18n>Sound</button></div>
+        <div class="set-row"><span><span data-i18n>Double-clicking a file opens it in RoarPlay</span><small data-i18n>Tick the kinds you want, then Apply once. The Mac asks you to confirm each kind, so tick only what you need.</small></span></div>
+        <div class="ext-head"><b data-i18n>Video</b><button class="lnk" data-all="video" data-i18n>all</button><button class="lnk" data-none="video" data-i18n>none</button></div>
+        <div class="exts" id="extsVideo"></div>
+        <div class="ext-head"><b data-i18n>Sound</b><button class="lnk" data-all="audio" data-i18n>all</button><button class="lnk" data-none="audio" data-i18n>none</button></div>
+        <div class="exts" id="extsAudio"></div>
+        <div class="set-row"><span><small id="defaultsText"></small></span><button class="btn sm main" id="defaultApply" data-i18n>Apply</button></div>
       </div>
 
       <div class="label" data-i18n>Updates</div>
       <div class="set-box">
         <div class="set-row"><span><b id="updName">RoarPlay</b><small id="updStatus"></small></span>
-          <button class="btn sm" id="updCheck" data-i18n>Check now</button>
+          <span class="ver" id="ver2"></span><button class="btn sm" id="updCheck" data-i18n>Check now</button>
           <button class="btn sm main" id="updRestart" hidden data-i18n>Restart to update</button></div>
         <label class="check"><input type="checkbox" id="autoUpdate" /><span><span data-i18n>Update by itself</span><small data-i18n>Looks for a new version every two hours, brings it in the background and puts it in when RoarPlay closes.</small></span></label>
       </div>

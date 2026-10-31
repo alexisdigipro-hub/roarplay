@@ -231,7 +231,7 @@ body.compact main { padding: 6px; }
 body.compact .stage { padding: 0; border-radius: 10px; border: 0; background: transparent; box-shadow: none; -webkit-backdrop-filter: none; backdrop-filter: none; -webkit-app-region: drag; }
 body.compact .screen { border-radius: 8px; -webkit-app-region: no-drag; }
 body.compact .screen video { -webkit-app-region: drag; }
-.bezel-bar { position: fixed; left: 12px; right: 12px; bottom: 12px; z-index: 30; display: flex; align-items: center; gap: 6px; padding: 4px 6px; border-radius: var(--r); background: rgba(24,26,31,.82);
+.bezel-bar { position: fixed; left: 12px; right: 12px; bottom: 12px; z-index: 30; display: flex; align-items: center; gap: 6px; padding: 4px 6px; border-radius: var(--r); background: rgba(24,26,31,.82); -webkit-app-region: no-drag;
   box-shadow: inset 0 0 0 1px var(--edge-2), 0 10px 30px rgba(0,0,0,.45); -webkit-backdrop-filter: var(--blur); backdrop-filter: var(--blur); opacity: 0; transition: opacity .25s; pointer-events: none; }
 body.compact.show-bar .bezel-bar { opacity: 1; pointer-events: auto; }
 .bezel-bar .spacer { flex: 1; }
@@ -401,3 +401,39 @@ body.cmp-side .pic > video { width: 50%; }
 .bar .kf { position: absolute; top: 50%; width: 1px; height: 7px; margin-top: -3.5px; background: rgba(255,255,255,.35); pointer-events: none; }
 .note-ask { position: fixed; left: 50%; bottom: 110px; transform: translateX(-50%); z-index: 40; display: flex; align-items: center; gap: 6px; padding: 6px 6px 6px 12px; border-radius: var(--R); background: var(--float); box-shadow: var(--lit), inset 0 0 0 1px var(--edge-2); animation: pop .3s cubic-bezier(.34,1.56,.64,1) both; }
 .note-ask input { width: 320px; border: 0; background: transparent; outline: none; font-size: 14px; }
+
+/* ---------- minimal (Alex, 31 Oct: "even more minimal"): fewer things in sight, the rest behind one button ---------- */
+.ib { width: 30px; height: 30px; color: var(--dim); }
+.ib svg { width: 16px; height: 16px; }
+.ib:hover { color: var(--text); }
+.keys .ib { color: var(--muted); }
+.play { width: 44px; height: 44px; }
+.tc { font-size: 18px; }
+.transport { gap: 6px; }
+.bar { height: 18px; }
+.bar::before { height: 3px; margin-top: -1.5px; background: rgba(255,255,255,.08); }
+.buf, .done { height: 3px; margin-top: -1.5px; }
+.head { width: 11px; height: 11px; margin: -5.5px 0 0 -5.5px; box-shadow: 0 0 0 2px color-mix(in srgb, var(--acc) 40%, transparent), 0 2px 6px rgba(0,0,0,.5); }
+.tools-more { display: none; align-items: center; gap: 2px; padding-right: 4px; margin-right: 4px; border-right: 1px solid var(--line); animation: fade .2s ease both; }
+body.more-open .tools-more { display: flex; }
+body.more-open #moreBtn { color: var(--text); }
+.top .ib { color: var(--dim); }
+.top .ib.on { color: var(--text); background: var(--glass); box-shadow: inset 0 0 0 1px var(--edge); }
+/* while it plays and the mouse rests: only the picture */
+body.quiet.playing.idle-ui .top, body.quiet.playing.idle-ui .transport, body.quiet.playing.idle-ui .side { opacity: 0; transition: opacity .5s; }
+body.quiet.playing.idle-ui { cursor: none; }
+.top, .transport, .side { transition: opacity .25s; }
+/* Open with RoarPlay: the kinds to tick */
+.ext-head { display: flex; align-items: baseline; gap: 10px; margin: 4px 2px 0; font-size: 12.5px; }
+.ext-head b { font-weight: 600; }
+.lnk { border: 0; background: none; padding: 0; color: var(--acc-2); font-size: 12px; cursor: pointer; }
+.exts { display: flex; flex-wrap: wrap; gap: 4px; }
+.exts label { display: inline-flex; align-items: center; gap: 5px; height: 24px; padding: 0 8px 0 6px; border-radius: 7px; background: rgba(0,0,0,.2); box-shadow: inset 0 0 0 1px var(--line); font: 500 11.5px var(--mono); color: var(--muted); cursor: pointer; }
+.exts label:has(input:checked) { color: var(--text); background: var(--sel); box-shadow: inset 0 0 0 1px var(--sel-edge); }
+.exts input { width: 12px; height: 12px; margin: 0; accent-color: var(--acc); }
+#ver2 { margin-right: 6px; }
+
+.bezel-bar * { -webkit-app-region: no-drag; }
+.bz-bar { position: relative; flex: 1; height: 16px; cursor: pointer; margin: 0 6px; }
+.bz-bar::before { content: ''; position: absolute; left: 0; right: 0; top: 50%; height: 3px; margin-top: -1.5px; border-radius: 2px; background: rgba(255,255,255,.15); }
+.bz-bar i { position: absolute; left: 0; top: 50%; height: 3px; margin-top: -1.5px; border-radius: 2px; background: var(--acc-2); pointer-events: none; }

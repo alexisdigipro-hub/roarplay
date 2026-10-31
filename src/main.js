@@ -31,7 +31,7 @@ function createWindow() {
     ? { titleBarStyle: 'hiddenInset', trafficLightPosition: { x: 16, y: 21 } }
     : { titleBarStyle: 'hidden', titleBarOverlay: { color: '#2b3038', symbolColor: '#eef0f3', height: 58 } };
   win = new BrowserWindow({
-    ...startSize(), center: true, minWidth: 760, minHeight: 520, show: false, backgroundColor: '#1b1e23', autoHideMenuBar: true, ...frame,
+    ...startSize(), center: true, minWidth: 640, minHeight: 360, show: false, backgroundColor: '#1b1e23', autoHideMenuBar: true, ...frame,
     title: 'RoarPlay',
     webPreferences: { preload: path.join(__dirname, 'preload.js'), contextIsolation: true, nodeIntegration: false },
   });
@@ -254,8 +254,9 @@ ipcMain.handle('on-top', (_e, on) => { if (win) win.setAlwaysOnTop(!!on, 'floati
 
 // Open with RoarPlay (Alex, 31 Oct): on a Mac the helper tells the system; on Windows the system's own page opens,
 // where the person picks RoarPlay (Windows lets no app do that for itself)
-ipcMain.handle('set-default', (_e, kind) => {
-  const exts = kind === 'video' ? media.VIDEO_EXT : media.AUDIO_EXT;
+ipcMain.handle('file-kinds', () => ({ video: media.VIDEO_EXT, audio: media.AUDIO_EXT }));
+ipcMain.handle('set-default', (_e, exts) => {
+  if (!Array.isArray(exts) || !exts.length) return { ok: false, error: 'Nothing ticked' };
   if (process.platform === 'win32') { shell.openExternal('ms-settings:defaultapps?registeredAppUser=RoarPlay').catch(() => shell.openExternal('ms-settings:defaultapps')); return { ok: true, opened: true }; }
   if (process.platform !== 'darwin') return { ok: false, error: 'Only on a Mac or Windows' };
   const helper = path.join(process.resourcesPath, 'bin', 'setdefault');
@@ -326,7 +327,7 @@ ipcMain.handle('fit', (_e, { ratio, extra, resize }) => {
 ipcMain.handle('compact', (_e, on) => {
   if (!win) return;
   if (process.platform === 'darwin') win.setWindowButtonVisibility(!on);
-  win.setMinimumSize(on ? 240 : 760, on ? 160 : 520);
+  win.setMinimumSize(on ? 240 : 640, on ? 160 : 360);
 });
 ipcMain.handle('platform', () => process.platform);
 ipcMain.handle('version', () => app.getVersion());
