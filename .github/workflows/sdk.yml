@@ -79,5 +79,8 @@ jobs:
         run: |
           TAG="sdk-${{ inputs.name }}"
           gh release view "$TAG" -R "$GITHUB_REPOSITORY" >/dev/null 2>&1 || gh release create "$TAG" -R "$GITHUB_REPOSITORY" --draft --title "$TAG (private, for the build)" --notes "Camera SDK files for the build. Draft: never published."
+          # a release file must be under 2 GB: a bigger one (a camera clip) goes up in parts, name.part-aa, -ab... (cat joins them)
+          for f in sdk/*; do if [ "$(stat -c %s "$f")" -ge 2000000000 ]; then split -b 1900m "$f" "$f.part-" && rm "$f"; fi; done
+          ls -la sdk
           gh release upload "$TAG" -R "$GITHUB_REPOSITORY" --clobber sdk/*
           gh release view "$TAG" -R "$GITHUB_REPOSITORY"

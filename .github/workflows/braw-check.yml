@@ -37,3 +37,23 @@ jobs:
           SAMPLE=$(find /var/folders /tmp -name sample.braw 2>/dev/null | head -1)
           [ -n "$SAMPLE" ] || { gh release download sdk-braw -R "$GITHUB_REPOSITORY" -D /tmp/z && cd /tmp/z && unzip -q "$(ls *.zip | sort -V | tail -1)" && hdiutil attach -nobrowse -readonly -mountpoint /tmp/zd "$(ls *.dmg | sort -V | tail -1)" && pkgutil --expand-full /tmp/zd/*.pkg /tmp/zp && SAMPLE=$(find /tmp/zp -name sample.braw | head -1); cd -; }
           "$B/roarplay-braw" info "$SAMPLE"
+      # Alex's own clip (draft release sdk-braw-clip, PYXIS 12K): its facts, frame 0 at every scale with the reader's own
+      # notes, and a small picture of each printed as base64 between markers to look at
+      - name: Alex's clip
+        run: |
+          gh release download sdk-braw-clip -R "$GITHUB_REPOSITORY" -D /tmp/clip || { echo "no clip yet"; exit 0; }
+          for P in /tmp/clip/*.part-aa; do [ -e "$P" ] && cat "${P%.part-aa}".part-* > "${P%.part-aa}" && rm "${P%.part-aa}".part-*; done
+          ls -la /tmp/clip
+          C=$(ls /tmp/clip/*.braw | head -1); echo "clip: $C"
+          R=build/helper/roarplay-braw; FF=vendor/ffmpeg/darwin-arm64/ffmpeg
+          INFO=$($R info "$C"); echo "info: $INFO"
+          $R meta "$C" | head -150 || true
+          for S in 1 2 4 8; do
+            WH=$(node -e "const i=JSON.parse(process.argv[1]),s=+process.argv[2]; console.log(Math.floor(i.width/s)+'x'+Math.floor(i.height/s))" "$INFO" "$S")
+            for L in 709 shot; do
+              $R video "$C" 0 "$S" "$L" 2>/tmp/err-$S-$L | head -c $(node -e "const [w,h]=process.argv[1].split('x'); console.log(w*h*4)" "$WH") > /tmp/f-$S-$L.rgba || true
+              echo "scale $S $L ($WH): $(wc -c < /tmp/f-$S-$L.rgba) bytes; reader says: $(cat /tmp/err-$S-$L)"
+              $FF -hide_banner -loglevel error -y -f rawvideo -pix_fmt rgba -s "$WH" -i /tmp/f-$S-$L.rgba -frames:v 1 -vf "crop=iw/3:ih/3:iw/3:ih/3,scale=480:-2:flags=neighbor" -q:v 5 /tmp/look-$S-$L.jpg
+              echo "==LOOK $S $L=="; base64 -i /tmp/look-$S-$L.jpg | tr -d '\n'; echo; echo "==END=="
+            done
+          done

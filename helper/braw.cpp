@@ -103,8 +103,10 @@ class Callback : public IBlackmagicRawCallback {
       default: break;
     }
     if (!bpp || !iw || !ih) { note("format", fmt, iw, ih, size); return {}; }
-    const size_t stride = size / ih; // rows may be padded
-    if (stride < (size_t)iw * bpp) { note("size", fmt, iw, ih, size); return {}; }
+    // the rows are packed; the SDK rounds the whole buffer up (to 4 KB pages), so the size says nothing about the rows:
+    // reading size / height as the row length shifted each row by a few pixels (Alex's URSA Cine 17K clip, 1 Nov)
+    const size_t stride = (size_t)iw * bpp;
+    if ((size_t)size < stride * ih) { note("size", fmt, iw, ih, size); return {}; }
     if (iw != W || ih != H) note("scale", fmt, iw, ih, size);
     std::vector<uint8_t> o((size_t)W * H * 4);
     for (uint32_t y = 0; y < H; y++) {
@@ -276,6 +278,39 @@ int main(int argc, char** argv) {
            "\"gamma\":\"%s\",\"gamut\":\"%s\",\"cameraLut\":%s,\"gammas\":\"%s\",\"gamuts\":\"%s\",\"sizes\":\"%s\"}\n",
            w, h, fps, (unsigned long long)frames, tcs.c_str(), camera.c_str(), ach, abits, arate, (unsigned long long)asamples,
            gamma.c_str(), gamut.c_str(), lut ? "true" : "false", gammas.c_str(), gamuts.c_str(), sizes(clip).c_str());
+    return 0;
+  }
+
+  // every metadata item of the clip and of frame 0, one per line, "key = value" (for Info and to find orientation)
+  if (cmd == "meta") {
+    auto dump = [](IBlackmagicRawMetadataIterator* it, const char* where) {
+      if (!it) return;
+      while (true) {
+        CFStringRef k = nullptr; Variant v; VariantInit(&v);
+        if (it->GetKey(&k) != S_OK) break;
+        std::string val;
+        if (it->GetData(&v) == S_OK) {
+          char b[64] = "";
+          switch (v.vt) {
+            case blackmagicRawVariantTypeString: val = fromCF(v.bstrVal); break;
+            case blackmagicRawVariantTypeU8: case blackmagicRawVariantTypeU16: snprintf(b, sizeof b, "%u", (unsigned)v.uiVal); val = b; break;
+            case blackmagicRawVariantTypeS16: snprintf(b, sizeof b, "%d", (int)v.iVal); val = b; break;
+            case blackmagicRawVariantTypeS32: snprintf(b, sizeof b, "%d", v.intVal); val = b; break;
+            case blackmagicRawVariantTypeU32: snprintf(b, sizeof b, "%u", v.uintVal); val = b; break;
+            case blackmagicRawVariantTypeFloat32: snprintf(b, sizeof b, "%g", v.fltVal); val = b; break;
+            case blackmagicRawVariantTypeFloat64: snprintf(b, sizeof b, "%g", v.dblVal); val = b; break;
+            default: val = "(array)"; break;
+          }
+        }
+        printf("%s %s = %s\n", where, fromCF(k).c_str(), val.c_str());
+        if (k) CFRelease(k);
+        VariantClear(&v);
+        if (it->Next() != S_OK) break;
+      }
+      it->Release();
+    };
+    IBlackmagicRawMetadataIterator* it = nullptr;
+    if (clip->GetMetadataIterator(&it) == S_OK) dump(it, "clip");
     return 0;
   }
 
