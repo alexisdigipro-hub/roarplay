@@ -42,6 +42,7 @@ jobs:
       - name: Alex's clip
         run: |
           gh release download sdk-braw-clip -R "$GITHUB_REPOSITORY" -D /tmp/clip || { echo "no clip yet"; exit 0; }
+          for P in /tmp/clip/*.part-aa; do [ -e "$P" ] && cat "${P%.part-aa}".part-* > "${P%.part-aa}" && rm "${P%.part-aa}".part-*; done
           ls -la /tmp/clip
           C=$(ls /tmp/clip/*.braw | head -1); echo "clip: $C"
           R=build/helper/roarplay-braw; FF=vendor/ffmpeg/darwin-arm64/ffmpeg
