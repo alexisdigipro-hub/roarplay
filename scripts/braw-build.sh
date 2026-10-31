@@ -29,7 +29,7 @@ SAMPLE="$SDK/Media/sample.braw"
 INFO=$(build/helper/roarplay-braw info "$SAMPLE"); echo "info: $INFO"
 W2=$(node -e "const i=JSON.parse(process.argv[1]); console.log(Math.floor(i.width/4)+'x'+Math.floor(i.height/4))" "$INFO")
 FF=${FFMPEG:-vendor/ffmpeg/darwin-$(uname -m | sed s/x86_64/x64/)/ffmpeg}
-build/helper/roarplay-braw video "$SAMPLE" 10 4 | "$FF" -hide_banner -loglevel error -y -f rawvideo -pix_fmt rgba -s "$W2" -i pipe:0 -frames:v 1 "$W/frame.png"
+build/helper/roarplay-braw video "$SAMPLE" 0 4 | "$FF" -hide_banner -loglevel error -y -f rawvideo -pix_fmt rgba -s "$W2" -i pipe:0 -frames:v 1 "$W/frame.png"
 ls -la "$W/frame.png"; test -s "$W/frame.png"
 if node -e "process.exit(JSON.parse(process.argv[1]).audio.channels ? 0 : 1)" "$INFO"; then
   build/helper/roarplay-braw audio "$SAMPLE" 0 | head -c 192000 | wc -c

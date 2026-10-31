@@ -151,6 +151,7 @@ int main(int argc, char** argv) {
 
   if (cmd == "video") {
     uint64_t first = argc > 3 ? strtoull(argv[3], nullptr, 10) : 0;
+    if (frames && first >= frames) first = frames - 1; // a seek at the very end shows the last frame
     int s = argc > 4 ? atoi(argv[4]) : 1;
     BlackmagicRawResolutionScale scale = s >= 8 ? blackmagicRawResolutionScaleEighth : s >= 4 ? blackmagicRawResolutionScaleQuarter : s >= 2 ? blackmagicRawResolutionScaleHalf : blackmagicRawResolutionScaleFull;
     Out out;
