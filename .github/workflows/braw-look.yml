@@ -5,8 +5,9 @@ name: Look inside the Blackmagic RAW SDK
 on:
   workflow_dispatch:
 
+# a draft release is seen only with write access
 permissions:
-  contents: read
+  contents: write
 
 jobs:
   look:
