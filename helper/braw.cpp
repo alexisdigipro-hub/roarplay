@@ -2,7 +2,8 @@
 // RAW SDK (kept in the draft release sdk-braw, never in this repository) and shipped as Resources/bin/roarplay-braw
 // with the SDK's BlackmagicRawAPI.framework beside it. The SDK decodes; this only hands ffmpeg what it decoded:
 //   roarplay-braw info  <clip>                         one line of JSON: size, rate, frames, timecode, sound
-//   roarplay-braw video <clip> <first frame> <scale>   raw RGBA frames on stdout, one after another (scale 1, 2, 4, 8)
+//   roarplay-braw video <clip> <first frame> <scale> [look]   raw RGBA frames on stdout, one after another (scale 1,
+//                                                      2, 4, 8; look 709 = Rec.709, lut = the camera's LUT, shot = as set)
 //   roarplay-braw audio <clip> <first sample>          the sound as raw signed little-endian PCM on stdout
 // main.js runs it and pipes its stdout into an ffmpeg that reads rawvideo / PCM, as any other source.
 #include "BlackmagicRawAPI.h"
@@ -39,7 +40,8 @@ struct Out {
 
 class Callback : public IBlackmagicRawCallback {
  public:
-  explicit Callback(Out* o, BlackmagicRawResolutionScale scale) : out(o), scale(scale) {}
+  Callback(Out* o, BlackmagicRawResolutionScale scale, uint32_t w, uint32_t h, IBlackmagicRawClipProcessingAttributes* look)
+      : out(o), scale(scale), W(w), H(h), look(look) {}
   virtual ~Callback() {}
   void ReadComplete(IBlackmagicRawJob* readJob, HRESULT result, IBlackmagicRawFrame* frame) override {
     uint64_t* idx = nullptr;
@@ -47,7 +49,7 @@ class Callback : public IBlackmagicRawCallback {
     IBlackmagicRawJob* decodeJob = nullptr;
     if (result == S_OK) result = frame->SetResourceFormat(blackmagicRawResourceFormatRGBAU8);
     if (result == S_OK) result = frame->SetResolutionScale(scale);
-    if (result == S_OK) result = frame->CreateJobDecodeAndProcessFrame(nullptr, nullptr, &decodeJob);
+    if (result == S_OK) result = frame->CreateJobDecodeAndProcessFrame(look, nullptr, &decodeJob);
     if (result == S_OK) result = decodeJob->SetUserData(idx);
     if (result == S_OK) result = decodeJob->Submit();
     if (result != S_OK) { if (decodeJob) decodeJob->Release(); finish(idx, {}); }
@@ -57,9 +59,11 @@ class Callback : public IBlackmagicRawCallback {
     uint64_t* idx = nullptr;
     job->GetUserData((void**)&idx);
     std::vector<uint8_t> bytes;
-    void* data = nullptr; uint32_t size = 0;
-    if (result == S_OK && image->GetResource(&data) == S_OK && image->GetResourceSizeBytes(&size) == S_OK && data)
-      bytes.assign((uint8_t*)data, (uint8_t*)data + size);
+    void* data = nullptr; uint32_t size = 0, iw = 0, ih = 0;
+    BlackmagicRawResourceFormat fmt = blackmagicRawResourceFormatRGBAU8;
+    if (result == S_OK && image->GetResource(&data) == S_OK && image->GetResourceSizeBytes(&size) == S_OK && data &&
+        image->GetWidth(&iw) == S_OK && image->GetHeight(&ih) == S_OK && image->GetResourceFormat(&fmt) == S_OK)
+      bytes = toRGBA((const uint8_t*)data, size, iw, ih, fmt);
     finish(idx, std::move(bytes));
     job->Release();
   }
@@ -76,6 +80,42 @@ class Callback : public IBlackmagicRawCallback {
   ULONG STDMETHODCALLTYPE Release(void) override { return 0; }
 
  private:
+  // what the SDK hands back, made exactly W x H RGBA 8-bit, the size ffmpeg was told: the SDK may decode a camera at
+  // another size than asked (a scale it does not offer), pad its rows, or keep another format; any of these, written
+  // as they came, shears the picture into grey stripes (Alex's URSA Cine clip, 31 Oct)
+  std::vector<uint8_t> toRGBA(const uint8_t* src, uint32_t size, uint32_t iw, uint32_t ih, BlackmagicRawResourceFormat fmt) {
+    int bpp = 0; bool bgr = false, wide = false;
+    switch (fmt) {
+      case blackmagicRawResourceFormatRGBAU8: bpp = 4; break;
+      case blackmagicRawResourceFormatBGRAU8: bpp = 4; bgr = true; break;
+      case blackmagicRawResourceFormatRGBAU16: bpp = 8; wide = true; break;
+      case blackmagicRawResourceFormatBGRAU16: bpp = 8; wide = true; bgr = true; break;
+      case blackmagicRawResourceFormatRGBU16: bpp = 6; wide = true; break;
+      default: break;
+    }
+    if (!bpp || !iw || !ih) { note("format", fmt, iw, ih, size); return {}; }
+    const size_t stride = size / ih; // rows may be padded
+    if (stride < (size_t)iw * bpp) { note("size", fmt, iw, ih, size); return {}; }
+    if (iw != W || ih != H) note("scale", fmt, iw, ih, size);
+    std::vector<uint8_t> o((size_t)W * H * 4);
+    for (uint32_t y = 0; y < H; y++) {
+      const uint8_t* row = src + (size_t)((uint64_t)y * ih / H) * stride;
+      uint8_t* d = o.data() + (size_t)y * W * 4;
+      for (uint32_t x = 0; x < W; x++, d += 4) {
+        const uint8_t* p = row + (size_t)((uint64_t)x * iw / W) * bpp;
+        uint8_t c[4];
+        if (wide) { const uint16_t* q = (const uint16_t*)p; for (int i = 0; i < 3; i++) c[i] = q[i] >> 8; c[3] = 255; }
+        else { c[0] = p[0]; c[1] = p[1]; c[2] = p[2]; c[3] = 255; }
+        d[0] = bgr ? c[2] : c[0]; d[1] = c[1]; d[2] = bgr ? c[0] : c[2]; d[3] = c[3];
+      }
+    }
+    return o;
+  }
+  void note(const char* what, int fmt, uint32_t iw, uint32_t ih, uint32_t size) {
+    static std::atomic<bool> said{false};
+    if (said.exchange(true)) return;
+    fprintf(stderr, "braw %s: asked %ux%u, got %ux%u format 0x%08X, %u bytes\n", what, W, H, iw, ih, (unsigned)fmt, size);
+  }
   void finish(uint64_t* idx, std::vector<uint8_t> bytes) {
     if (!idx) return;
     { std::lock_guard<std::mutex> l(out->m); if (bytes.empty()) out->failed = true; out->done[*idx] = std::move(bytes); out->inFlight--; }
@@ -84,7 +124,71 @@ class Callback : public IBlackmagicRawCallback {
   }
   Out* out;
   BlackmagicRawResolutionScale scale;
+  uint32_t W, H;
+  IBlackmagicRawClipProcessingAttributes* look;
 };
+
+// the values the SDK offers for a string attribute (gamma, gamut, LUT mode), as text
+static std::vector<std::string> choices(IBlackmagicRawClipProcessingAttributes* a, BlackmagicRawClipProcessingAttribute what) {
+  std::vector<std::string> out;
+  uint32_t n = 0; bool ro = false;
+  if (a->GetClipAttributeList(what, nullptr, &n, &ro) != S_OK || !n) return out;
+  std::vector<Variant> v(n);
+  for (auto& x : v) VariantInit(&x);
+  if (a->GetClipAttributeList(what, v.data(), &n, &ro) == S_OK)
+    for (uint32_t i = 0; i < n; i++) if (v[i].vt == blackmagicRawVariantTypeString) out.push_back(fromCF(v[i].bstrVal));
+  for (auto& x : v) VariantClear(&x);
+  return out;
+}
+static std::string current(IBlackmagicRawClipProcessingAttributes* a, BlackmagicRawClipProcessingAttribute what) {
+  Variant v; VariantInit(&v); std::string s;
+  if (a->GetClipAttribute(what, &v) == S_OK && v.vt == blackmagicRawVariantTypeString) s = fromCF(v.bstrVal);
+  VariantClear(&v);
+  return s;
+}
+// the first offered value whose name has one of `want` in it (in that order), and not `avoid`
+static std::string pick(const std::vector<std::string>& list, std::initializer_list<const char*> want, const char* avoid = nullptr) {
+  for (const char* w : want)
+    for (const auto& c : list)
+      if (c.find(w) != std::string::npos && (!avoid || c.find(avoid) == std::string::npos)) return c;
+  return "";
+}
+static bool setText(IBlackmagicRawClipProcessingAttributes* a, BlackmagicRawClipProcessingAttribute what, const std::string& val) {
+  if (val.empty()) return false;
+  Variant v; VariantInit(&v);
+  v.vt = blackmagicRawVariantTypeString; v.bstrVal = toCF(val.c_str());
+  bool ok = a->SetClipAttribute(what, &v) == S_OK;
+  CFRelease(v.bstrVal);
+  return ok;
+}
+static bool hasEmbeddedLut(IBlackmagicRawClipProcessingAttributes* a) {
+  IBlackmagicRawPost3DLUT* lut = nullptr;
+  if (a->GetEmbeddedPost3DLUT(&lut) == S_OK && lut) { lut->Release(); return true; }
+  return false;
+}
+// the clip's colour as asked: 709 (Rec.709 gamma and gamut, no LUT), lut (the LUT the camera embedded, else 709),
+// shot (untouched, as the camera was set)
+static IBlackmagicRawClipProcessingAttributes* lookFor(IBlackmagicRawClip* clip, const std::string& look) {
+  IBlackmagicRawClipProcessingAttributes* a = nullptr;
+  if (look == "shot" || clip->CloneClipProcessingAttributes(&a) != S_OK || !a) return nullptr;
+  auto modes = choices(a, blackmagicRawClipProcessingAttributePost3DLUTMode);
+  if (look == "lut" && hasEmbeddedLut(a) && setText(a, blackmagicRawClipProcessingAttributePost3DLUTMode, pick(modes, {"Embedded"})))
+    return a;
+  setText(a, blackmagicRawClipProcessingAttributePost3DLUTMode, pick(modes, {"Disabled", "None", "Off"}));
+  auto gammas = choices(a, blackmagicRawClipProcessingAttributeGamma);
+  auto gamuts = choices(a, blackmagicRawClipProcessingAttributeGamut);
+  std::string g = pick(gammas, {"Rec.709", "Rec 709", "709"}, "2100");
+  if (g.empty()) g = pick(gammas, {"Video"}, "Extended");
+  bool ok = setText(a, blackmagicRawClipProcessingAttributeGamma, g);
+  setText(a, blackmagicRawClipProcessingAttributeGamut, pick(gamuts, {"Rec.709", "Rec 709", "709"}, "2100"));
+  if (!ok) fprintf(stderr, "braw look: no Rec.709 gamma among %zu offered\n", gammas.size());
+  return a;
+}
+static std::string joined(const std::vector<std::string>& v) {
+  std::string s;
+  for (const auto& x : v) { if (!s.empty()) s += "|"; for (char c : x) if (c != '"' && c != '\\') s += c; }
+  return s;
+}
 
 static int fail(const char* what) { fprintf(stderr, "%s\n", what); return 1; }
 
@@ -133,8 +237,19 @@ int main(int argc, char** argv) {
     if (audio) { audio->GetAudioChannelCount(&ach); audio->GetAudioBitDepth(&abits); audio->GetAudioSampleRate(&arate); audio->GetAudioSampleCount(&asamples); }
     CFStringRef cam = nullptr; std::string camera;
     if (clip->GetCameraType(&cam) == S_OK && cam) { camera = fromCF(cam); CFRelease(cam); }
-    printf("{\"width\":%u,\"height\":%u,\"fps\":%.6f,\"frames\":%llu,\"timecode\":\"%s\",\"camera\":\"%s\",\"audio\":{\"channels\":%u,\"bits\":%u,\"rate\":%u,\"samples\":%llu}}\n",
-           w, h, fps, (unsigned long long)frames, tcs.c_str(), camera.c_str(), ach, abits, arate, (unsigned long long)asamples);
+    // the colour as shot and what the SDK offers, for Info
+    std::string gamma, gamut, gammas, gamuts; bool lut = false;
+    IBlackmagicRawClipProcessingAttributes* a = nullptr;
+    if (clip->CloneClipProcessingAttributes(&a) == S_OK && a) {
+      gamma = current(a, blackmagicRawClipProcessingAttributeGamma); gamut = current(a, blackmagicRawClipProcessingAttributeGamut);
+      gammas = joined(choices(a, blackmagicRawClipProcessingAttributeGamma)); gamuts = joined(choices(a, blackmagicRawClipProcessingAttributeGamut));
+      lut = hasEmbeddedLut(a);
+      a->Release();
+    }
+    printf("{\"width\":%u,\"height\":%u,\"fps\":%.6f,\"frames\":%llu,\"timecode\":\"%s\",\"camera\":\"%s\",\"audio\":{\"channels\":%u,\"bits\":%u,\"rate\":%u,\"samples\":%llu},"
+           "\"gamma\":\"%s\",\"gamut\":\"%s\",\"cameraLut\":%s,\"gammas\":\"%s\",\"gamuts\":\"%s\"}\n",
+           w, h, fps, (unsigned long long)frames, tcs.c_str(), camera.c_str(), ach, abits, arate, (unsigned long long)asamples,
+           gamma.c_str(), gamut.c_str(), lut ? "true" : "false", gammas.c_str(), gamuts.c_str());
     return 0;
   }
 
@@ -161,7 +276,10 @@ int main(int argc, char** argv) {
     int s = argc > 4 ? atoi(argv[4]) : 1;
     BlackmagicRawResolutionScale scale = s >= 8 ? blackmagicRawResolutionScaleEighth : s >= 4 ? blackmagicRawResolutionScaleQuarter : s >= 2 ? blackmagicRawResolutionScaleHalf : blackmagicRawResolutionScaleFull;
     Out out;
-    Callback cb(&out, scale);
+    const int sd = s >= 8 ? 8 : s >= 4 ? 4 : s >= 2 ? 2 : 1;
+    IBlackmagicRawClipProcessingAttributes* look = lookFor(clip, argc > 5 ? argv[5] : "709");
+    Callback cb(&out, scale, w / sd, h / sd, look); // the size media.js brawSource tells ffmpeg
+
     codec->SetCallback(&cb);
     const int ahead = 6; // frames decoded at once on the SDK's threads
     uint64_t next = first, write = first;
@@ -185,6 +303,7 @@ int main(int argc, char** argv) {
     }
     fflush(stdout);
     codec->FlushJobs();
+    if (look) look->Release();
     return 0;
   }
   return fail("usage: roarplay-braw info|video|audio <clip> ...");

@@ -272,6 +272,7 @@ function readList(p) {
   } catch { return []; }
 }
 ipcMain.handle('pick-folder', async () => { const r = await dialog.showOpenDialog(win, { properties: ['openDirectory', 'createDirectory'] }); return r.canceled ? null : r.filePaths[0]; });
+ipcMain.handle('braw-look', (_e, l) => media.setBrawLook(l));
 ipcMain.handle('on-top', (_e, on) => { if (win) win.setAlwaysOnTop(!!on, 'floating'); });
 
 // Open with RoarPlay (Alex, 31 Oct): on a Mac the helper tells the system; on Windows the system's own page opens,
