@@ -281,6 +281,39 @@ int main(int argc, char** argv) {
     return 0;
   }
 
+  // every metadata item of the clip and of frame 0, one per line, "key = value" (for Info and to find orientation)
+  if (cmd == "meta") {
+    auto dump = [](IBlackmagicRawMetadataIterator* it, const char* where) {
+      if (!it) return;
+      while (true) {
+        CFStringRef k = nullptr; Variant v; VariantInit(&v);
+        if (it->GetKey(&k) != S_OK) break;
+        std::string val;
+        if (it->GetData(&v) == S_OK) {
+          char b[64] = "";
+          switch (v.vt) {
+            case blackmagicRawVariantTypeString: val = fromCF(v.bstrVal); break;
+            case blackmagicRawVariantTypeU8: case blackmagicRawVariantTypeU16: snprintf(b, sizeof b, "%u", (unsigned)v.uiVal); val = b; break;
+            case blackmagicRawVariantTypeS16: snprintf(b, sizeof b, "%d", (int)v.iVal); val = b; break;
+            case blackmagicRawVariantTypeS32: snprintf(b, sizeof b, "%d", v.intVal); val = b; break;
+            case blackmagicRawVariantTypeU32: snprintf(b, sizeof b, "%u", v.uintVal); val = b; break;
+            case blackmagicRawVariantTypeFloat32: snprintf(b, sizeof b, "%g", v.fltVal); val = b; break;
+            case blackmagicRawVariantTypeFloat64: snprintf(b, sizeof b, "%g", v.dblVal); val = b; break;
+            default: val = "(array)"; break;
+          }
+        }
+        printf("%s %s = %s\n", where, fromCF(k).c_str(), val.c_str());
+        if (k) CFRelease(k);
+        VariantClear(&v);
+        if (it->Next() != S_OK) break;
+      }
+      it->Release();
+    };
+    IBlackmagicRawMetadataIterator* it = nullptr;
+    if (clip->GetMetadataIterator(&it) == S_OK) dump(it, "clip");
+    return 0;
+  }
+
   if (cmd == "audio") {
     if (!audio) return fail("The clip has no sound");
     uint32_t ach = 0, abits = 0; uint64_t total = 0;

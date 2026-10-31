@@ -47,6 +47,7 @@ jobs:
           C=$(ls /tmp/clip/*.braw | head -1); echo "clip: $C"
           R=build/helper/roarplay-braw; FF=vendor/ffmpeg/darwin-arm64/ffmpeg
           INFO=$($R info "$C"); echo "info: $INFO"
+          $R meta "$C" | head -150 || true
           for S in 1 2 4 8; do
             WH=$(node -e "const i=JSON.parse(process.argv[1]),s=+process.argv[2]; console.log(Math.floor(i.width/s)+'x'+Math.floor(i.height/s))" "$INFO" "$S")
             for L in 709 shot; do
