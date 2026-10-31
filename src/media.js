@@ -372,4 +372,127 @@ function subtitleFilesBeside(file) {
   } catch { return []; }
 }
 
-module.exports = { setFfmpegPath, ffmpegPath, VIDEO_EXT, AUDIO_EXT, SUB_EXT, RAW, kindOf, rawOf, isUrl, sequenceOf, inputArgs, parts, parseProbe, parseDetail, probe, plan, streamArgs, mimeOf, firstPacket, waveform, cover, frameAt, thumb, subtitles, subtitleFilesBeside, windowPlaysVideo };
+// ---------- the professional side (0.3) ----------
+
+// every picture packet of the file, read without decoding: when it shows (pts), whether it is a keyframe, its size.
+// The GOP strip, the keyframe ticks and the bitrate graph come from this. A B-frame shows before a packet that came
+// after it (its pts is below the one before), so the reordered packets are marked B, the keyframes I, the rest P.
+function packets(file, info, { onProgress = null } = {}) {
+  return new Promise((resolve) => {
+    const p = spawn(FFMPEG, ['-hide_banner', '-loglevel', 'error', '-nostdin', ...inputArgs(file, { fps: info?.sequence?.fps }), '-map', '0:v:0', '-c', 'copy', '-copyts', '-f', 'framecrc', 'pipe:1'], { windowsHide: true });
+    let tb = [1, 1], buf = '', n = 0;
+    const out = { t: [], k: [], b: [], s: [] };
+    let maxPts = -Infinity;
+    const start = info?.start || 0;
+    p.stdout.on('data', (d) => {
+      buf += d.toString();
+      const lines = buf.split('\n'); buf = lines.pop();
+      for (const l of lines) {
+        let m;
+        if ((m = /^#tb 0: (\d+)\/(\d+)/.exec(l))) { tb = [+m[1], +m[2]]; continue; }
+        if (l[0] !== '0' || l[1] !== ',') continue;
+        const f = l.split(',');
+        const pts = (+f[2] * tb[0]) / tb[1] - start;
+        const key = !/F=0x/.test(l) || /F=0x1\b/.test(l);
+        const bframe = pts < maxPts;
+        if (pts > maxPts) maxPts = pts;
+        out.t.push(+pts.toFixed(4)); out.k.push(key ? 1 : 0); out.b.push(bframe ? 1 : 0); out.s.push(+f[4]);
+        if (onProgress && ++n % 500 === 0 && info?.duration) onProgress(Math.min(0.99, pts / info.duration));
+      }
+    });
+    p.on('error', () => resolve(out));
+    p.on('close', () => { module.exports._sortPackets(out); resolve(out); });
+  });
+}
+// packets come in decode order; the strip wants them in the order they show
+function _sortPackets(out) {
+  const idx = out.t.map((_, i) => i).sort((a, b) => out.t[a] - out.t[b]);
+  for (const k of ['t', 'k', 'b', 's']) out[k] = idx.map((i) => out[k][i]);
+}
+
+// the QC report: the file decoded once, end to end, by ffmpeg's own checks. Black, frozen and silent stretches,
+// loudness (EBU R128: integrated, range, true peak), decode errors, and what the packets say (gaps, drops). Every
+// finding has a time, so a click goes there. Progress through -progress.
+function qc(file, info, { onProgress = null } = {}) {
+  return new Promise((resolve) => {
+    const hasV = !!info?.video, hasA = !!(info?.audio && info.audio.length);
+    const args = ['-hide_banner', '-nostdin', '-loglevel', 'info', '-progress', 'pipe:1', '-nostats', ...inputArgs(file, { fps: info?.sequence?.fps })];
+    if (hasV) args.push('-map', '0:v:0', '-vf', 'blackdetect=d=0.5:pic_th=0.98,freezedetect=n=-60dB:d=2', '-fps_mode', 'passthrough');
+    if (hasA) args.push('-map', '0:a:0', '-af', 'silencedetect=n=-60dB:d=2,ebur128=peak=true');
+    args.push('-f', 'null', '-');
+    const p = spawn(FFMPEG, args, { windowsHide: true });
+    const findings = [];
+    const summary = {};
+    let err = '', outBuf = '';
+    const dur = info?.duration || 0;
+    p.stdout.on('data', (d) => {
+      outBuf += d.toString();
+      const lines = outBuf.split('\n'); outBuf = lines.pop();
+      for (const l of lines) { const m = /^out_time_(?:us|ms)=(\d+)/.exec(l); if (m && dur && onProgress) onProgress(Math.min(0.99, +m[1] / 1e6 / dur)); }
+    });
+    p.stderr.on('data', (d) => { err += d.toString(); if (err.length > 4e6) err = err.slice(-2e6); });
+    p.on('error', () => resolve({ findings, summary, error: 'ffmpeg could not run' }));
+    p.on('close', () => {
+      const lines = err.split('\n');
+      let m;
+      for (const l of lines) {
+        if ((m = /black_start:([\d.]+) black_end:([\d.]+) black_duration:([\d.]+)/.exec(l))) findings.push({ kind: 'black', t: +m[1], end: +m[2], text: `${(+m[3]).toFixed(2)} s` });
+        else if ((m = /lavfi\.freezedetect\.freeze_start: ([\d.]+)/.exec(l))) findings.push({ kind: 'freeze', t: +m[1], end: null, text: '' });
+        else if ((m = /lavfi\.freezedetect\.freeze_end: ([\d.]+)/.exec(l))) { const f = [...findings].reverse().find((x) => x.kind === 'freeze' && x.end == null); if (f) { f.end = +m[1]; f.text = `${(f.end - f.t).toFixed(2)} s`; } }
+        else if ((m = /silence_start: ([\d.]+)/.exec(l))) findings.push({ kind: 'silence', t: +m[1], end: null, text: '' });
+        else if ((m = /silence_end: ([\d.]+) \| silence_duration: ([\d.]+)/.exec(l))) { const f = [...findings].reverse().find((x) => x.kind === 'silence' && x.end == null); if (f) { f.end = +m[1]; f.text = `${(+m[2]).toFixed(2)} s`; } }
+        else if (/^\[.*@ 0x[0-9a-f]+\] /.test(l) && /(error|invalid|corrupt|missing|concealing|damaged|non-monotonic|discard)/i.test(l) && !/ebur128|silencedetect|blackdetect|freezedetect/.test(l)) {
+          const text = l.replace(/^\[.*?\] /, '').trim();
+          const last = findings[findings.length - 1];
+          if (last && last.kind === 'decode' && last.text === text) last.n = (last.n || 1) + 1; else findings.push({ kind: 'decode', t: null, text });
+        }
+      }
+      // the loudness summary at the end of ebur128's report
+      const sum = err.slice(err.lastIndexOf('Summary:'));
+      if ((m = /I:\s+(-?[\d.]+) LUFS/.exec(sum))) summary.integrated = +m[1];
+      if ((m = /LRA:\s+([\d.]+) LU/.exec(sum))) summary.range = +m[1];
+      if ((m = /Peak:\s+(-?[\d.]+) dBFS/.exec(sum))) summary.truePeak = +m[1];
+      if ((m = /Threshold:\s+(-?[\d.]+) LUFS/.exec(sum))) summary.threshold = +m[1];
+      if (findings.length > 2000) { findings.length = 2000; summary.truncated = true; }
+      resolve({ findings, summary });
+    });
+  });
+}
+
+// what the packets say: gaps in time (frames missing) and a stretch where the picture ran out of keyframes for long
+function packetFindings(pk, fps) {
+  const out = [];
+  if (!pk || pk.t.length < 2 || !fps) return out;
+  const step = 1 / fps;
+  let lastKey = pk.t[0];
+  for (let i = 1; i < pk.t.length; i++) {
+    const gap = pk.t[i] - pk.t[i - 1];
+    if (gap > step * 1.5 && gap < 3600) out.push({ kind: 'gap', t: pk.t[i - 1], end: pk.t[i], text: `${Math.round(gap / step) - 1}` });
+    if (pk.k[i]) lastKey = pk.t[i];
+  }
+  const kf = pk.k.reduce((a, b) => a + b, 0);
+  out.summary = { frames: pk.t.length, keyframes: kf, bframes: pk.b.reduce((a, b) => a + b, 0), gopAvg: kf ? pk.t.length / kf : 0, lastKey };
+  return out;
+}
+
+// a .cube LUT (Resolve, every grading tool): 1D or 3D, as floats, with its size and its domain
+function parseCube(text) {
+  const lut = { size: 0, dim: 3, min: [0, 0, 0], max: [1, 1, 1], title: '', data: [] };
+  for (const raw of text.split('\n')) {
+    const l = raw.trim();
+    if (!l || l[0] === '#') continue;
+    let m;
+    if ((m = /^TITLE\s+"?(.*?)"?$/.exec(l))) lut.title = m[1];
+    else if ((m = /^LUT_3D_SIZE\s+(\d+)/.exec(l))) { lut.size = +m[1]; lut.dim = 3; }
+    else if ((m = /^LUT_1D_SIZE\s+(\d+)/.exec(l))) { lut.size = +m[1]; lut.dim = 1; }
+    else if ((m = /^DOMAIN_MIN\s+([\d.e+-]+)\s+([\d.e+-]+)\s+([\d.e+-]+)/.exec(l))) lut.min = [+m[1], +m[2], +m[3]];
+    else if ((m = /^DOMAIN_MAX\s+([\d.e+-]+)\s+([\d.e+-]+)\s+([\d.e+-]+)/.exec(l))) lut.max = [+m[1], +m[2], +m[3]];
+    else if (/^[\d.e+-]+\s+[\d.e+-]+\s+[\d.e+-]+$/.test(l)) { const [r, g, b] = l.split(/\s+/).map(Number); lut.data.push(r, g, b); }
+  }
+  const want = lut.dim === 3 ? lut.size ** 3 * 3 : lut.size * 3;
+  if (!lut.size || lut.data.length < want) throw new Error('Not a .cube LUT');
+  lut.data.length = want;
+  return lut;
+}
+
+module.exports = { setFfmpegPath, ffmpegPath, VIDEO_EXT, AUDIO_EXT, SUB_EXT, RAW, kindOf, rawOf, isUrl, sequenceOf, inputArgs, parts, parseProbe, parseDetail, probe, plan, streamArgs, mimeOf, firstPacket, waveform, cover, frameAt, thumb, subtitles, subtitleFilesBeside, windowPlaysVideo, packets, _sortPackets, qc, packetFindings, parseCube };

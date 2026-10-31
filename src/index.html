@@ -25,6 +25,9 @@
       <div class="screen" id="screen">
         <div class="pic" id="pic">
           <video id="v" preload="auto" playsinline></video>
+          <canvas id="glc" hidden></canvas>
+          <!-- the second file of a compare, over the first, cut by the wipe -->
+          <div class="cmp" id="cmp" hidden><video id="v2" preload="auto" playsinline muted></video><div class="wipe" id="wipe"></div><span class="cmp-tag a">A</span><span class="cmp-tag b">B</span></div>
           <div class="mask" id="mask" hidden></div>
           <div class="subs" id="subs" hidden></div>
         </div>
@@ -124,13 +127,17 @@
         <div class="pop-row sl"><span data-i18n>Brightness</span><input type="range" id="brightness" min="0.5" max="1.5" step="0.01" /></div>
         <div class="pop-row sl"><span data-i18n>Contrast</span><input type="range" id="contrast" min="0.5" max="1.5" step="0.01" /></div>
         <div class="pop-row sl"><span data-i18n>Saturation</span><input type="range" id="saturation" min="0" max="2" step="0.01" /></div>
+        <div class="pop-row"><span>LUT</span><div class="lutrow"><button class="btn sm" id="lutPick" data-i18n>Choose a .cube…</button><span class="lutname" id="lutName"></span><button class="ib" id="lutOff" hidden aria-label="Off"><svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></svg></button></div></div>
+        <div class="pop-row sl" id="lutMixRow" hidden><span data-i18n>LUT amount</span><input type="range" id="lutMix" min="0" max="1" step="0.01" /></div>
+        <div class="pop-row"><span data-i18n>Compare</span><div class="lutrow"><button class="btn sm" id="cmpPick" data-i18n>Second file…</button><span class="lutname" id="cmpName"></span><button class="ib" id="cmpOff" hidden aria-label="Off"><svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></svg></button></div></div>
+        <div class="pop-row" id="cmpRow" hidden><span></span><div class="seg sm" id="cmpMode"><button data-v="wipe" data-i18n>Wipe</button><button data-v="side" data-i18n>Side by side</button></div><div class="stepper"><button class="ib" id="cmpEarlier">−</button><b id="cmpOffset">0 fr</b><button class="ib" id="cmpLater">+</button></div></div>
         <div class="pop-row"><button class="btn sm" id="pictureReset" data-i18n>Reset the picture</button><span class="spacer"></span>
           <label class="check"><input type="checkbox" id="followPic" /><span><span data-i18n>Window takes the picture's shape</span></span></label></div>
       </div>
       <div class="pop" id="popAudio" hidden>
         <div class="pop-h" data-i18n>Sound</div>
         <div class="list" id="tracksList"></div>
-        <div class="pop-row"><span data-i18n>Hear</span><div class="chips" id="chanChips"><button data-v="stereo" data-i18n>Stereo</button><button data-v="left" data-i18n>Left</button><button data-v="right" data-i18n>Right</button><button data-v="mono" data-i18n>Mono</button><button data-v="swap" data-i18n>Swapped</button></div></div>
+        <div class="pop-row"><span data-i18n>Hear</span><div class="chips" id="chanChips"><button data-v="stereo" data-i18n>Stereo</button><button data-v="left" data-i18n>Left</button><button data-v="right" data-i18n>Right</button><button data-v="mono" data-i18n>Mono</button><button data-v="swap" data-i18n>Swapped</button><button data-v="center" data-i18n>Centre only</button><button data-v="surround" data-i18n>Surrounds only</button></div></div>
         <div class="pop-row"><span data-i18n>Delay</span><div class="stepper"><button class="ib" id="audEarlier">−</button><b id="audDelay">0 ms</b><button class="ib" id="audLater">+</button></div></div>
         <div class="pop-row"><span data-i18n>Output</span><select id="outDevice"></select></div>
         <div class="pop-row eq-head"><span data-i18n>Equalizer</span><div class="chips" id="eqPresets"><button data-v="flat" data-i18n>Flat</button><button data-v="voice" data-i18n>Voice</button><button data-v="bass" data-i18n>Bass</button><button data-v="bright" data-i18n>Bright</button></div></div>
@@ -140,7 +147,7 @@
 
     <aside class="side" id="side">
       <div class="side-head">
-        <div class="seg wide" id="sideTab"><button data-v="queue" data-i18n>Queue</button><button data-v="info" data-i18n>Info</button></div>
+        <div class="seg wide" id="sideTab"><button data-v="queue" data-i18n>Queue</button><button data-v="info" data-i18n>Info</button><button data-v="scopes" data-i18n>Scopes</button><button data-v="notes" data-i18n>Notes</button></div>
       </div>
       <div class="side-body" id="queueBox">
         <ol class="queue" id="queue"></ol>
@@ -151,6 +158,48 @@
           <button class="ib" id="saveList" data-i18n-label="Save the list as M3U" aria-label="Save the list as M3U"><svg viewBox="0 0 24 24"><path d="M5 4h10l4 4v12H5z"/><path d="M8 4v5h7M8 20v-6h8v6"/></svg></button>
           <span class="spacer"></span><button class="btn sm" id="clearQueue" data-i18n>Clear</button></div>
       </div>
+      <!-- Scopes: the sound's meters and loudness, the picture's scopes, the GOP and the bitrate, the QC report -->
+      <div class="side-body" id="scopesBox" hidden>
+        <div class="scopes">
+          <div class="box meters-box">
+            <h4 data-i18n>Sound</h4>
+            <div class="meters" id="meters"></div>
+            <div class="lufs"><div><small>M</small><b id="lufsM">−∞</b></div><div><small>S</small><b id="lufsS">−∞</b></div><div><small>I</small><b id="lufsI">−∞</b></div><div><small>LRA</small><b id="lufsR">0</b></div><div><small data-i18n>Peak</small><b id="lufsP">−∞</b></div><button class="ib" id="lufsReset" data-i18n-label="Start the integrated loudness again" aria-label="Start the integrated loudness again"><svg viewBox="0 0 24 24"><path d="M4 12a8 8 0 1 0 2.3-5.7M4 4v5h5"/></svg></button></div>
+          </div>
+          <div class="box scope-box">
+            <h4 data-i18n>Picture</h4>
+            <div class="seg wide sm" id="scopeKind"><button data-v="waveform" data-i18n>Waveform</button><button data-v="parade">RGB</button><button data-v="vector" data-i18n>Vector</button><button data-v="histogram" data-i18n>Histogram</button><button data-v="off" data-i18n>Off</button></div>
+            <canvas id="scope" width="300" height="180"></canvas>
+          </div>
+          <div class="box gop-box">
+            <h4>GOP <small id="gopSummary"></small></h4>
+            <canvas id="gop" width="300" height="56"></canvas>
+            <canvas id="brate" width="300" height="50"></canvas>
+            <div class="gop-foot"><label class="check sm"><input type="checkbox" id="keyTicks" /><span><span data-i18n>Keyframes on the bar</span></span></label><button class="btn sm" id="scanBtn" data-i18n>Read the packets</button></div>
+          </div>
+          <div class="box qc-box">
+            <h4 data-i18n>QC report</h4>
+            <div class="qc-head"><button class="btn sm main" id="qcBtn" data-i18n>Check the file</button><span class="qc-prog" id="qcProg"></span><span class="spacer"></span><button class="btn sm" id="qcSave" hidden data-i18n>Save</button></div>
+            <div class="qc-sum" id="qcSum"></div>
+            <div class="qc-list" id="qcList"></div>
+          </div>
+        </div>
+      </div>
+      <!-- Notes: the rating and the markers of this file, saved out as CSV or EDL -->
+      <div class="side-body" id="notesBox" hidden>
+        <div class="notes">
+          <div class="box">
+            <h4 data-i18n>Rating</h4>
+            <div class="stars" id="stars"><button data-r="1">★</button><button data-r="2">★</button><button data-r="3">★</button><button data-r="4">★</button><button data-r="5">★</button><button class="ib" data-r="0" aria-label="None"><svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></svg></button></div>
+          </div>
+          <div class="box">
+            <h4><span data-i18n>Markers</span><small data-i18n>N adds one at the frame on screen</small></h4>
+            <div class="marks" id="marks"></div>
+            <div class="empty sm" id="marksEmpty" data-i18n>No markers yet.</div>
+          </div>
+        </div>
+        <div class="side-foot"><button class="btn sm" id="notesCsv">CSV</button><button class="btn sm" id="notesEdl">EDL (Resolve)</button><span class="spacer"></span><button class="btn sm" id="notesClear" data-i18n>Clear</button></div>
+      </div>
       <div class="side-body" id="infoBox" hidden>
         <div class="facts" id="facts"></div>
         <div class="side-foot"><button class="btn sm" id="copyInfo"><svg viewBox="0 0 24 24"><rect x="8" y="8" width="12" height="12" rx="2"/><path d="M16 8V6a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2h2"/></svg><span data-i18n>Copy all</span></button><span class="spacer"></span><button class="btn sm" id="revealFile" data-i18n>Show in the folder</button></div>
@@ -158,6 +207,8 @@
     </aside>
   </main>
   <div class="toast" id="toast" hidden></div>
+  <!-- a marker's note: a small line at the bar -->
+  <div class="note-ask" id="noteAsk" hidden><input type="text" id="noteField" spellcheck="true" /><button class="btn sm main" id="noteSave" data-i18n>Add</button><button class="ib" id="noteCancel" aria-label="Cancel"><svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></svg></button></div>
 
   <!-- the bezel's own small controls: shown when the mouse comes -->
   <div class="bezel-bar" id="bezelBar" hidden>

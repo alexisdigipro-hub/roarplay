@@ -125,6 +125,27 @@ const ok = (what) => { n++; console.log(`  ✓ ${what}`); };
   const th = await m.thumb(P('native.mp4'), 1); assert.ok(th && th.length > 500 && th[0] === 0xff);
   ok('a thumbnail for the bar');
 
+  console.log('the packets, the QC report, a LUT');
+  const pk = await m.packets(P('h264.mkv'), mk);
+  assert.strictEqual(pk.t.length, 100); assert.strictEqual(pk.k.reduce((a, b) => a + b, 0), 4); assert.ok(pk.t.every((x, i) => i === 0 || x >= pk.t[i - 1]));
+  assert.ok(pk.b.reduce((a, b) => a + b, 0) > 10, 'B-frames seen');
+  const pf = m.packetFindings(pk, 25); assert.strictEqual(pf.length, 0); assert.strictEqual(pf.summary.keyframes, 4);
+  ok('every packet in show order: keyframes, B-frames, sizes');
+  ff('-f', 'lavfi', '-i', 'testsrc2=size=320x180:rate=25', '-f', 'lavfi', '-i', 'sine=f=300:sample_rate=48000', '-t', '8', '-vf', "drawbox=enable='between(t,2,3)':c=black:t=fill", '-af', "volume=enable='between(t,5,7.5)':volume=0", '-c:v', 'libx264', '-pix_fmt', 'yuv420p', '-c:a', 'aac', P('qc.mp4'));
+  const q = await m.qc(P('qc.mp4'), (await probe('qc.mp4')).info);
+  const kinds = q.findings.map((x) => x.kind);
+  assert.ok(kinds.includes('black') && kinds.includes('silence'), kinds.join(','));
+  const bl = q.findings.find((x) => x.kind === 'black'); assert.ok(Math.abs(bl.t - 2) < 0.1 && Math.abs(bl.end - 3) < 0.1);
+  const sil = q.findings.find((x) => x.kind === 'silence'); assert.ok(Math.abs(sil.t - 5) < 0.1);
+  assert.ok(typeof q.summary.integrated === 'number' && q.summary.integrated < -10 && q.summary.integrated > -40, `LUFS ${q.summary.integrated}`);
+  assert.ok(typeof q.summary.truePeak === 'number');
+  ok('black and silence found with their times, the loudness measured');
+  const cube = m.parseCube('TITLE "x"\nLUT_3D_SIZE 2\nDOMAIN_MIN 0 0 0\nDOMAIN_MAX 1 1 1\n0 0 0\n1 0 0\n0 1 0\n1 1 0\n0 0 1\n1 0 1\n0 1 1\n1 1 1\n');
+  assert.strictEqual(cube.size, 2); assert.strictEqual(cube.dim, 3); assert.strictEqual(cube.data.length, 24); assert.strictEqual(cube.title, 'x');
+  assert.strictEqual(m.parseCube('LUT_1D_SIZE 2\n0 0 0\n1 1 1\n').dim, 1);
+  assert.throws(() => m.parseCube('hello'));
+  ok('a .cube read, 3D and 1D, and what is not one refused');
+
   console.log('waveform, cover, snapshot');
   const w = await m.waveform(P('tone.wav'), 0, 100, 4);
   assert.ok(w.length >= 95 && w.length <= 105, `${w.length} bins`); assert.ok(w.slice(0, -1).every((x) => x > 0.1 && x <= 1), `peaks ${w.slice(0, 3)}`);
