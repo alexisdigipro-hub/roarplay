@@ -37,3 +37,23 @@ jobs:
           g++ -std=c++17 -O2 -I "$D/Include" helper/r3d.cpp "$D/Lib/linux64/libR3DSDKPIC-cpp11.a" -ldl -lpthread -o /tmp/roarplay-r3d
           cp "$D"/Redistributable/linux/*.so /tmp/
           /tmp/roarplay-r3d info /nothing.R3D || echo "(no clip given: the error above is expected)"
+      # Alex's own clip (draft release sdk-r3d-clip, from RoarTransfer): its facts, a frame at each scale with the
+      # exact bytes, a small picture of it printed as base64 between markers to look at, a second of its sound
+      - name: Alex's clip
+        run: |
+          gh release download sdk-r3d-clip -R "$GITHUB_REPOSITORY" -D /tmp/clip || { echo "no clip yet"; exit 0; }
+          ls -la /tmp/clip
+          C=$(ls /tmp/clip/*.R3D /tmp/clip/*.r3d 2>/dev/null | head -1); echo "clip: $C"
+          cd /tmp
+          INFO=$(./roarplay-r3d info "$C"); echo "info: $INFO"
+          command -v ffmpeg || { sudo apt-get update -qq && sudo apt-get install -y -qq ffmpeg >/dev/null; }
+          for S in 1 2 4 8; do
+            WH=$(node -e "const i=JSON.parse(process.argv[1]),s=+process.argv[2]; console.log(Math.floor(i.width/s)+'x'+Math.floor(i.height/s))" "$INFO" "$S")
+            WANT=$(node -e "const [w,h]=process.argv[1].split('x'); console.log(w*h*4)" "$WH")
+            GOT=$(./roarplay-r3d video "$C" 0 "$S" | head -c "$WANT" | wc -c)
+            echo "scale $S ($WH): $GOT bytes, want $WANT"
+          done
+          WH=$(node -e "const i=JSON.parse(process.argv[1]); console.log(Math.floor(i.width/4)+'x'+Math.floor(i.height/4))" "$INFO")
+          ./roarplay-r3d video "$C" 0 4 | ffmpeg -hide_banner -loglevel error -y -f rawvideo -pix_fmt bgra -s "$WH" -i pipe:0 -frames:v 1 -vf scale=480:-2 -q:v 6 look.jpg
+          ls -la look.jpg; echo "==LOOK=="; base64 -w0 look.jpg; echo; echo "==END=="
+          ./roarplay-r3d audio "$C" 0 | head -c 192000 | wc -c
