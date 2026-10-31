@@ -69,6 +69,8 @@ class Callback : public IBlackmagicRawCallback {
   void SidecarMetadataParseWarning(IBlackmagicRawClip*, CFStringRef, uint32_t, CFStringRef) override {}
   void SidecarMetadataParseError(IBlackmagicRawClip*, CFStringRef, uint32_t, CFStringRef) override {}
   void PreparePipelineComplete(void*, HRESULT) override {}
+  // Blackmagic RAW 6.0 reads sound through jobs too; this reader asks for sound directly (GetAudioSamples)
+  void ReadAudioComplete(IBlackmagicRawJob*, HRESULT, IBlackmagicRawAudioBuffer*) override {}
   HRESULT STDMETHODCALLTYPE QueryInterface(REFIID, LPVOID*) override { return E_NOTIMPL; }
   ULONG STDMETHODCALLTYPE AddRef(void) override { return 0; }
   ULONG STDMETHODCALLTYPE Release(void) override { return 0; }
@@ -113,7 +115,11 @@ int main(int argc, char** argv) {
   CFStringRef path = toCF(argv[2]);
   HRESULT r = codec->OpenClip(path, &clip);
   CFRelease(path);
-  if (r != S_OK || !clip) return fail("Not a Blackmagic RAW clip, or it cannot be read");
+  if (r != S_OK || !clip) {
+    // the SDK's own code says why: a clip newer than this SDK, a file it cannot reach, a broken file
+    fprintf(stderr, "Not a Blackmagic RAW clip, or it cannot be read (SDK code 0x%08X)\n", (unsigned)r);
+    return 1;
+  }
 
   uint32_t w = 0, h = 0; float fps = 0; uint64_t frames = 0;
   clip->GetWidth(&w); clip->GetHeight(&h); clip->GetFrameRate(&fps); clip->GetFrameCount(&frames);

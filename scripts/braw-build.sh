@@ -6,8 +6,10 @@ set -euo pipefail
 cd "$(dirname "$0")/.."
 W=$(mktemp -d)
 gh release download sdk-braw -R "${GITHUB_REPOSITORY:-alexisdigipro-hub/roarplay}" -D "$W/zip"
-(cd "$W/zip" && unzip -q ./*.zip)
-hdiutil attach -nobrowse -readonly -mountpoint "$W/dmg" "$W"/zip/*.dmg >/dev/null
+# the newest SDK kept there (Alex sent 4.3.1, then 6.0 for clips from newer cameras)
+Z=$(ls "$W"/zip/*.zip | sort -V | tail -1); echo "SDK zip: $Z"
+(cd "$W/zip" && unzip -q "$Z")
+hdiutil attach -nobrowse -readonly -mountpoint "$W/dmg" "$(ls "$W"/zip/*.dmg | sort -V | tail -1)" >/dev/null
 pkgutil --expand-full "$(ls "$W"/dmg/*.pkg | head -1)" "$W/pkg"
 hdiutil detach "$W/dmg" -quiet || true
 SDK=$(find "$W/pkg" -type d -name "Blackmagic RAW SDK" | head -1)

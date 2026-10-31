@@ -35,5 +35,5 @@ jobs:
           ls -la "$B"; ls -la "$B/BlackmagicRawAPI.framework" "$B/BlackmagicRawAPI.framework/Versions" 2>/dev/null || true
           find "$B/BlackmagicRawAPI.framework" -maxdepth 3 -type l -exec ls -la {} \; | head -20
           SAMPLE=$(find /var/folders /tmp -name sample.braw 2>/dev/null | head -1)
-          [ -n "$SAMPLE" ] || { gh release download sdk-braw -R "$GITHUB_REPOSITORY" -D /tmp/z && cd /tmp/z && unzip -q *.zip && hdiutil attach -nobrowse -readonly -mountpoint /tmp/zd *.dmg && pkgutil --expand-full /tmp/zd/*.pkg /tmp/zp && SAMPLE=$(find /tmp/zp -name sample.braw | head -1); cd -; }
+          [ -n "$SAMPLE" ] || { gh release download sdk-braw -R "$GITHUB_REPOSITORY" -D /tmp/z && cd /tmp/z && unzip -q "$(ls *.zip | sort -V | tail -1)" && hdiutil attach -nobrowse -readonly -mountpoint /tmp/zd "$(ls *.dmg | sort -V | tail -1)" && pkgutil --expand-full /tmp/zd/*.pkg /tmp/zp && SAMPLE=$(find /tmp/zp -name sample.braw | head -1); cd -; }
           "$B/roarplay-braw" info "$SAMPLE"
