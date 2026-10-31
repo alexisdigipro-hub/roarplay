@@ -9,7 +9,9 @@ exports.default = async function (context) {
   const app = path.join(context.appOutDir, `${context.packager.appInfo.productFilename}.app`)
   // the helper and ffmpeg in Resources/bin are not where --deep looks, so they are signed first, by name
   const fs = require('fs')
-  for (const f of ['BlackmagicRawAPI.framework', 'roarplay-braw', 'setdefault', 'ffmpeg']) {
+  const bin = path.join(app, 'Contents', 'Resources', 'bin')
+  const dylibs = fs.existsSync(bin) ? fs.readdirSync(bin).filter((n) => n.endsWith('.dylib')) : []
+  for (const f of ['BlackmagicRawAPI.framework', ...dylibs, 'roarplay-braw', 'roarplay-r3d', 'setdefault', 'ffmpeg']) {
     const p = path.join(app, 'Contents', 'Resources', 'bin', f)
     if (fs.existsSync(p)) execFileSync('codesign', ['--force', ...(f.endsWith('.framework') ? ['--deep'] : []), '--sign', '-', p], { stdio: 'inherit' })
   }

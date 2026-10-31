@@ -158,6 +158,12 @@ const ok = (what) => { n++; console.log(`  ✓ ${what}`); };
   const sva = m.streamArgs('/x/A001.braw', bi, 'transcode', 2.5, { part: 'video' });
   assert.ok(!sva.includes('-ss') && sva.includes('pipe:0'));
   ok('a BRAW clip: the reader\'s frame, scale and sample, ffmpeg reading its pipe');
+  const ri = { braw: { reader: 'r3d', width: 6144, height: 3240, fps: 24, frames: 100, audio: { channels: 2, bits: 32, rate: 48000 } }, video: { fps: 24 }, audio: [{}] };
+  const rv = m.brawSource('/x/A037.R3D', ri, 'video', 1, 1080);
+  assert.deepStrictEqual(rv.cmd, ['video', '/x/A037.R3D', '24', '4']); assert.ok(rv.input.join(' ').includes('-pix_fmt bgra -s 1536x810'));
+  assert.ok(m.brawSource('/x/A037.R3D', ri, 'audio', 0, 1080).input.join(' ').includes('-f s32le -ar 48000 -ac 2'));
+  assert.ok(m.isR3d('/x/A.R3D') && m.isR3d('/x/b.nev') && !m.isR3d('/x/c.mov'));
+  ok('a RED clip: BGRA frames at a quarter, 32-bit sound');
 
   console.log('waveform, cover, snapshot');
   const w = await m.waveform(P('tone.wav'), 0, 100, 4);

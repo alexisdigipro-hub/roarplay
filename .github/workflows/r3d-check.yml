@@ -5,7 +5,7 @@ name: Check the RED R3D reader
 on:
   pull_request:
     branches: [main]
-    paths: ['helper/r3d.cpp', 'scripts/r3d-build.sh', '.github/workflows/r3d-check.yml']
+    paths: ['helper/r3d.cpp', 'scripts/r3d-build.sh', '.github/workflows/r3d-check.yml', 'package.json', 'src/media.js', 'src/main.js']
   workflow_dispatch:
 
 permissions:
@@ -42,7 +42,7 @@ jobs:
       - name: Alex's clip
         run: |
           gh release download sdk-r3d-clip -R "$GITHUB_REPOSITORY" -D /tmp/clip || { echo "no clip yet"; exit 0; }
-          for P in /tmp/clip/*.part-aa; do [ -e "$P" ] && cat "${P%.part-aa}".part-* > "${P%.part-aa}" && rm "${P%.part-aa}".part-*; done
+          for P in /tmp/clip/*.part-aa; do if [ -e "$P" ]; then cat "${P%.part-aa}".part-* > "${P%.part-aa}" && rm "${P%.part-aa}".part-*; fi; done
           ls -la /tmp/clip
           C=$(ls /tmp/clip/*.R3D /tmp/clip/*.r3d 2>/dev/null | head -1); echo "clip: $C"
           cd /tmp
@@ -58,3 +58,28 @@ jobs:
           ./roarplay-r3d video "$C" 0 4 | ffmpeg -hide_banner -loglevel error -y -f rawvideo -pix_fmt bgra -s "$WH" -i pipe:0 -frames:v 1 -vf scale=480:-2 -q:v 6 look.jpg
           ls -la look.jpg; echo "==LOOK=="; base64 -w0 look.jpg; echo; echo "==END=="
           ./roarplay-r3d audio "$C" 0 | head -c 192000 | wc -c
+
+  # the Mac build of the reader, as desktop.yml makes it, proved on Alex's clip
+  r3d-mac:
+    runs-on: macos-latest
+    env:
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: node scripts/fetch-ffmpeg.js darwin-arm64
+      - run: FFMPEG=vendor/ffmpeg/darwin-arm64/ffmpeg bash scripts/r3d-build.sh
+      # the same reader inside the packed app, as the person gets it, on Alex's clip
+      - run: npm install --no-audit --no-fund
+      - run: npx electron-builder --mac dir --arm64 --publish never
+        env:
+          CSC_IDENTITY_AUTO_DISCOVERY: 'false'
+      - name: The reader inside the packed app
+        run: |
+          B="out/mac-arm64/RoarPlay.app/Contents/Resources/bin"; ls -la "$B"
+          gh release download sdk-r3d-clip -R "$GITHUB_REPOSITORY" -D /tmp/clip || { echo "no clip"; exit 0; }
+          C=$(ls /tmp/clip/*.R3D | head -1)
+          "$B/roarplay-r3d" info "$C"
+          "$B/roarplay-r3d" video "$C" 0 8 | head -c 1000000 | wc -c

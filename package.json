@@ -1,6 +1,6 @@
 {
   "name": "roarplay",
-  "version": "0.4.5",
+  "version": "0.5.0",
   "description": "RoarPlay: plays every video and every sound file, on your own computer. The Mad Lions Lab.",
   "main": "src/main.js",
   "scripts": {
@@ -115,7 +115,9 @@
           "filter": [
             "setdefault",
             "roarplay-braw",
-            "BlackmagicRawAPI.framework/**/*"
+            "BlackmagicRawAPI.framework/**/*",
+            "roarplay-r3d",
+            "*.dylib"
           ]
         }
       ]

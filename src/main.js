@@ -13,7 +13,12 @@ if (app.isPackaged) {
   media.setFfmpegPath(path.join(process.resourcesPath, 'bin', process.platform === 'win32' ? 'ffmpeg.exe' : 'ffmpeg'));
   // the Blackmagic RAW reader and the SDK's libraries beside it (a Mac build only)
   media.setBrawPath(path.join(process.resourcesPath, 'bin', 'roarplay-braw'));
-} else if (process.env.ROARPLAY_BRAW) media.setBrawPath(process.env.ROARPLAY_BRAW);
+  // the RED R3D reader and RED's libraries beside it (a Mac build only)
+  media.setR3dPath(path.join(process.resourcesPath, 'bin', 'roarplay-r3d'));
+} else {
+  if (process.env.ROARPLAY_BRAW) media.setBrawPath(process.env.ROARPLAY_BRAW);
+  if (process.env.ROARPLAY_R3D) media.setR3dPath(process.env.ROARPLAY_R3D);
+}
 
 // rp://play/<id>: what ffmpeg makes while it plays, read by the page and handed to its <video> piece by piece
 protocol.registerSchemesAsPrivileged([{ scheme: 'rp', privileges: { standard: true, secure: true, stream: true, supportFetchAPI: true, corsEnabled: true } }]);
@@ -101,10 +106,10 @@ function playStream(s) {
     proc = p;
     running.set(s.id, p);
     let got = false, err = '';
-    // a BRAW clip: the reader decodes, its frames or its sound go into this ffmpeg's stdin
+    // a BRAW or R3D clip: the camera maker's reader decodes, its frames or its sound go into this ffmpeg's stdin
     if (s.info.braw) {
       const src = media.brawSource(s.file, s.info, s.part, s.start, s.maxH);
-      const r = spawn(process.env.ROARPLAY_BRAW || path.join(process.resourcesPath, 'bin', 'roarplay-braw'), src.cmd, { windowsHide: true });
+      const r = spawn(media.readerPath(s.info), src.cmd, { windowsHide: true });
       r.stdout.pipe(p.stdin);
       r.stdout.on('error', () => {}); p.stdin.on('error', () => {});
       r.stderr.on('data', (d) => { err = (err + d).slice(-2000); });
