@@ -50,6 +50,16 @@ jobs:
           grep -n "blackmagicRawClipProcessingAttribute\|blackmagicRawVariantType\|CloneClipProcessingAttributes\|GetPost3DLUT\|Post3DLUT" "$H" | head -60
           grep -n "VariantInit\|VariantClear\|SafeArray\|BSTR\|CFStringRef bstrVal" "$H" | head -20
           grep -rn "Gamma\|Gamut\|709" /tmp/brawpkg --include=*.cpp -l | head; S=$(grep -rln "blackmagicRawClipProcessingAttributeGamma" /tmp/brawpkg --include=*.cpp | grep Mac | head -1); echo "S=$S"; [ -n "$S" ] && grep -n "Gamma\|Gamut\|Variant\|LUT" "$S" | head -80 || true
+      - name: Sizes and resources
+        run: |
+          H=$(find /tmp/brawpkg -name BlackmagicRawAPI.h -path "*Mac*" | head -1)
+          grep -n "class BMD_PUBLIC IBlackmagicRawClipResolutions" -A 14 "$H" || true
+          grep -n "blackmagicRawResolutionScale\|blackmagicRawResourceType\|IID_IBlackmagicRawClipResolutions\|IID_IBlackmagicRawClipEx\|IID_IBlackmagicRawClipProcessingAttributes" "$H" | head -40
+          grep -n "class BMD_PUBLIC IBlackmagicRawProcessedImage" -A 14 "$H" || true
+          grep -n "class BMD_PUBLIC IBlackmagicRawFrame " -A 30 "$H" || true
+          grep -n "class BMD_PUBLIC IBlackmagicRawClipEx" -A 16 "$H" || true
+          grep -n "class BMD_PUBLIC IBlackmagicRawConfiguration " -A 26 "$H" || true
+          grep -rn "SetResolutionScale\|ClipResolutions\|GetResourceType" /tmp/brawpkg --include=*.cpp | grep Mac | head -20
       - name: A sample
         run: |
           S=$(find /tmp/brawpkg -path "*Mac*Samples*ExtractFrame*" -name "*.cpp" | head -1); echo "S=$S"; cat "$S" | head -260

@@ -62,7 +62,8 @@ class Callback : public IBlackmagicRawCallback {
     void* data = nullptr; uint32_t size = 0, iw = 0, ih = 0;
     BlackmagicRawResourceFormat fmt = blackmagicRawResourceFormatRGBAU8;
     if (result == S_OK && image->GetResource(&data) == S_OK && image->GetResourceSizeBytes(&size) == S_OK && data &&
-        image->GetWidth(&iw) == S_OK && image->GetHeight(&ih) == S_OK && image->GetResourceFormat(&fmt) == S_OK)
+        image->GetWidth(&iw) == S_OK && image->GetHeight(&ih) == S_OK && image->GetResourceFormat(&fmt) == S_OK &&
+        cpu(image))
       bytes = toRGBA((const uint8_t*)data, size, iw, ih, fmt);
     finish(idx, std::move(bytes));
     job->Release();
@@ -80,6 +81,14 @@ class Callback : public IBlackmagicRawCallback {
   ULONG STDMETHODCALLTYPE Release(void) override { return 0; }
 
  private:
+  static bool cpu(IBlackmagicRawProcessedImage* image) {
+    BlackmagicRawResourceType t = blackmagicRawResourceTypeBufferCPU;
+    if (image->GetResourceType(&t) == S_OK && t != blackmagicRawResourceTypeBufferCPU) {
+      fprintf(stderr, "braw: the picture came in GPU memory (0x%08X)\n", (unsigned)t);
+      return false;
+    }
+    return true;
+  }
   // what the SDK hands back, made exactly W x H RGBA 8-bit, the size ffmpeg was told: the SDK may decode a camera at
   // another size than asked (a scale it does not offer), pad its rows, or keep another format; any of these, written
   // as they came, shears the picture into grey stripes (Alex's URSA Cine clip, 31 Oct)
@@ -184,6 +193,23 @@ static IBlackmagicRawClipProcessingAttributes* lookFor(IBlackmagicRawClip* clip,
   if (!ok) fprintf(stderr, "braw look: no Rec.709 gamma among %zu offered\n", gammas.size());
   return a;
 }
+// the sizes this camera's clips decode at (the 12K sensor of URSA Cine and PYXIS 12K has its own), and the scale the
+// SDK itself picks for a size, so the reader never asks a camera for a scale it does not offer (Alex's PYXIS 12K, 31 Oct)
+static std::string sizes(IBlackmagicRawClip* clip) {
+  IBlackmagicRawClipResolutions* r = nullptr; std::string s;
+  if (clip->QueryInterface(IID_IBlackmagicRawClipResolutions, (LPVOID*)&r) != S_OK || !r) return s;
+  uint32_t n = 0; r->GetResolutionCount(&n);
+  for (uint32_t i = 0; i < n; i++) { uint32_t w = 0, h = 0; if (r->GetResolution(i, &w, &h) == S_OK) { if (!s.empty()) s += "|"; s += std::to_string(w) + "x" + std::to_string(h); } }
+  r->Release();
+  return s;
+}
+static BlackmagicRawResolutionScale scaleFor(IBlackmagicRawClip* clip, uint32_t w, uint32_t h, BlackmagicRawResolutionScale fallback) {
+  IBlackmagicRawClipResolutions* r = nullptr; BlackmagicRawResolutionScale s = fallback;
+  if (clip->QueryInterface(IID_IBlackmagicRawClipResolutions, (LPVOID*)&r) != S_OK || !r) return s;
+  if (r->GetClosestScaleForResolution(w, h, &s) != S_OK) s = fallback;
+  r->Release();
+  return s;
+}
 static std::string joined(const std::vector<std::string>& v) {
   std::string s;
   for (const auto& x : v) { if (!s.empty()) s += "|"; for (char c : x) if (c != '"' && c != '\\') s += c; }
@@ -247,9 +273,9 @@ int main(int argc, char** argv) {
       a->Release();
     }
     printf("{\"width\":%u,\"height\":%u,\"fps\":%.6f,\"frames\":%llu,\"timecode\":\"%s\",\"camera\":\"%s\",\"audio\":{\"channels\":%u,\"bits\":%u,\"rate\":%u,\"samples\":%llu},"
-           "\"gamma\":\"%s\",\"gamut\":\"%s\",\"cameraLut\":%s,\"gammas\":\"%s\",\"gamuts\":\"%s\"}\n",
+           "\"gamma\":\"%s\",\"gamut\":\"%s\",\"cameraLut\":%s,\"gammas\":\"%s\",\"gamuts\":\"%s\",\"sizes\":\"%s\"}\n",
            w, h, fps, (unsigned long long)frames, tcs.c_str(), camera.c_str(), ach, abits, arate, (unsigned long long)asamples,
-           gamma.c_str(), gamut.c_str(), lut ? "true" : "false", gammas.c_str(), gamuts.c_str());
+           gamma.c_str(), gamut.c_str(), lut ? "true" : "false", gammas.c_str(), gamuts.c_str(), sizes(clip).c_str());
     return 0;
   }
 
@@ -277,6 +303,7 @@ int main(int argc, char** argv) {
     BlackmagicRawResolutionScale scale = s >= 8 ? blackmagicRawResolutionScaleEighth : s >= 4 ? blackmagicRawResolutionScaleQuarter : s >= 2 ? blackmagicRawResolutionScaleHalf : blackmagicRawResolutionScaleFull;
     Out out;
     const int sd = s >= 8 ? 8 : s >= 4 ? 4 : s >= 2 ? 2 : 1;
+    scale = scaleFor(clip, w / sd, h / sd, scale); // a scale this camera offers; toRGBA makes it the size ffmpeg expects
     IBlackmagicRawClipProcessingAttributes* look = lookFor(clip, argc > 5 ? argv[5] : "709");
     Callback cb(&out, scale, w / sd, h / sd, look); // the size media.js brawSource tells ffmpeg
 
