@@ -1,0 +1,83 @@
+name: Bring in a camera SDK
+
+# The camera makers' SDKs (Blackmagic RAW, RED R3D) cannot be downloaded by a script: Alex downloads them from the
+# maker's page and sends them with RoarTransfer. This copies them from the RoarTransfer link into a draft release of
+# this repository (a draft is seen only by the repository's people, never published), where desktop.yml finds them.
+# It also prints what is inside each one, so the code that uses them can be written against the real headers.
+on:
+  workflow_dispatch:
+    inputs:
+      token:
+        description: 'The RoarTransfer link or its token (roartransfer.com/AsFBmV or AsFBmV)'
+        required: true
+      name:
+        description: 'What it is: braw or r3d'
+        required: true
+        default: braw
+
+permissions:
+  contents: write
+
+jobs:
+  bring:
+    runs-on: ubuntu-latest
+    env:
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - name: Ask RoarTransfer for the files
+        id: get
+        shell: bash
+        run: |
+          set -euo pipefail
+          T="${{ inputs.token }}"; T="${T##*/}"; T="${T%%#*}"; T="${T%%\?*}"
+          curl -sS -H 'apikey: sb_publishable_7mQ3e0NH5lCmdoIKx2-FUA_EgCoXx9X' "https://bzmjhbnwhdwmncxkqkdl.supabase.co/functions/v1/roar-transfer-get?t=$T" > get.json
+          node -e '
+            const d = require("./get.json");
+            if (d.error) { console.error("RoarTransfer says:", d.error); process.exit(1); }
+            const files = [d, ...(d.files || [])].filter((f) => f && (f.url || f.pcloud));
+            const seen = new Set(); const out = [];
+            for (const f of files) { const k = f.token || f.url || (f.pcloud && f.pcloud.code); if (seen.has(k)) continue; seen.add(k); out.push({ name: f.name || "file", url: f.url || "", pcloud: f.pcloud || null }); }
+            require("fs").writeFileSync("files.json", JSON.stringify(out, null, 1));
+            console.log(out.map((f) => f.name).join("\n"));
+          '
+      - name: Download them
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p sdk
+          node -e '
+            const files = require("./files.json");
+            (async () => {
+              for (const f of files) {
+                let url = f.url;
+                if (f.pcloud) {
+                  const r = await fetch(`https://${f.pcloud.host}/getpublinkdownload?code=${encodeURIComponent(f.pcloud.code)}&forcedownload=1`);
+                  const j = await r.json(); if (j.result === 0) url = `https://${j.hosts[0]}${j.path}`;
+                }
+                console.log(`${f.name}\t${url}`);
+              }
+            })();
+          ' > list.tsv
+          while IFS=$'\t' read -r name url; do
+            echo "↓ $name"; curl -sSL --retry 3 -o "sdk/$name" "$url"; ls -la "sdk/$name"
+          done < list.tsv
+      - name: What is inside
+        shell: bash
+        run: |
+          cd sdk
+          for f in *; do
+            echo "===== $f"; file "$f"
+            case "$f" in
+              *.zip) unzip -l "$f" | head -400 ;;
+              *.tar|*.tar.gz|*.tgz) tar -tf "$f" | head -400 ;;
+              *.dmg) 7z l "$f" 2>/dev/null | head -400 || true ;;
+              *.pkg) 7z l "$f" 2>/dev/null | head -200 || true ;;
+            esac
+          done
+      - name: Keep them in a draft release
+        shell: bash
+        run: |
+          TAG="sdk-${{ inputs.name }}"
+          gh release view "$TAG" -R "$GITHUB_REPOSITORY" >/dev/null 2>&1 || gh release create "$TAG" -R "$GITHUB_REPOSITORY" --draft --title "$TAG (private, for the build)" --notes "Camera SDK files for the build. Draft: never published."
+          gh release upload "$TAG" -R "$GITHUB_REPOSITORY" --clobber sdk/*
+          gh release view "$TAG" -R "$GITHUB_REPOSITORY"

@@ -11,6 +11,7 @@ const DEFAULTS = {
   playQuality: 1080, seqFps: 24, resume: true, snapFormat: 'png', snapWhere: 'beside', snapDir: '',
   chan: 'stereo', audDelay: 0, outDevice: '', eq: [0, 0, 0, 0, 0, 0, 0, 0, 0, 0], shuffle: false,
   scopeKind: 'waveform', keyTicks: false, lutFile: '', lutMix: 1, cmpMode: 'wipe', quiet: true,
+  keepQueue: true, autoplayOpen: true, jumpSecs: 1, keepLook: true, startVolume: 'keep', keepSound: true, subAuto: true, subLang: '', idleSecs: 2, sideStart: true, bezelTop: false, snapName: 'tc',
 };
 let S = { ...DEFAULTS };
 try { S = { ...DEFAULTS, ...JSON.parse(localStorage.getItem('settings') || '{}') }; } catch {}
@@ -83,7 +84,21 @@ const EL = {
   'Open files (Cmd/Ctrl+O)': 'Άνοιγμα αρχείων (Cmd/Ctrl+O)', 'More tools': 'Περισσότερα εργαλεία', 'Only the picture while it plays': 'Μόνο η εικόνα όσο παίζει',
   'The controls fade when the mouse rests, and come back when it moves.': 'Τα κουμπιά σβήνουν όταν ηρεμεί το ποντίκι και γυρίζουν όταν κουνηθεί.',
   'Tick the kinds you want, then Apply once. The Mac asks you to confirm each kind, so tick only what you need.': 'Τσέκαρε τα είδη που θες και πάτα Apply μία φορά. Το Mac ζητά επιβεβαίωση για κάθε είδος, γι\' αυτό τσέκαρε μόνο όσα χρειάζεσαι.',
-  'all': 'όλα', 'none': 'κανένα', 'Apply': 'Εφαρμογή',
+  'all': 'όλα', 'none': 'κανένα', 'Apply': 'Εφαρμογή', 'Check': 'Έλεγχος', 'General': 'Γενικά', 'At start': 'Στην εκκίνηση',
+  'Keep the list between sessions': 'Κράτα τη λίστα από φορά σε φορά', 'The files you had lined up are there again when RoarPlay opens.': 'Τα αρχεία που είχες στη σειρά είναι εκεί όταν ανοίγει το RoarPlay.',
+  'Play a file as soon as it opens': 'Παίξε το αρχείο μόλις ανοίξει', 'Off: it opens on its first frame and waits.': 'Κλειστό: ανοίγει στο πρώτο καρέ και περιμένει.',
+  'Shift with the arrows jumps': 'Shift με τα βελάκια πηδά', 'Keep the voices\' pitch at other speeds': 'Οι φωνές κρατούν τον τόνο τους στις άλλες ταχύτητες', 'Made on the fly': 'Επιτόπου',
+  'On opening, and when you resize it. An aspect chosen in Picture reshapes it too.': 'Στο άνοιγμα και όταν το μεγαλώνεις. Μια αναλογία από το Picture του αλλάζει κι αυτή το σχήμα.',
+  'A new file opens': 'Ένα νέο αρχείο ανοίγει', 'Keep the look from file to file': 'Κράτα την εμφάνιση από αρχείο σε αρχείο',
+  'Aspect, zoom, turn, brightness, contrast, saturation and the LUT stay as you set them. Off: every file opens clean.': 'Αναλογία, ζουμ, στροφή, φωτεινότητα, αντίθεση, κορεσμός και LUT μένουν όπως τα έβαλες. Κλειστό: κάθε αρχείο ανοίγει καθαρό.',
+  'Volume at start': 'Ένταση στην εκκίνηση', 'As left': 'Όπως έμεινε', 'Keep the equalizer and what you hear from file to file': 'Κράτα equalizer και κανάλια από αρχείο σε αρχείο', 'Off: every file opens stereo and flat.': 'Κλειστό: κάθε αρχείο ανοίγει στέρεο και επίπεδο.',
+  'Show subtitles by themselves': 'Δείξε υπότιτλους μόνοι τους', 'The first track in the file, or the first file beside it.': 'Το πρώτο κανάλι στο αρχείο, ή το πρώτο αρχείο δίπλα του.', 'Preferred language': 'Προτιμώμενη γλώσσα',
+  'Two letters, as in Film.el.srt: el, en, fr…': 'Δύο γράμματα, όπως στο Film.el.srt: el, en, fr…', 'They fade after': 'Σβήνουν μετά από', 'The side open at start': 'Το πλάι ανοιχτό στην εκκίνηση',
+  'Queue, Info, Scopes and Notes shown when RoarPlay opens.': 'Λίστα, Πληροφορίες, Scopes και Σημειώσεις φαίνονται όταν ανοίγει το RoarPlay.', 'The small bezel always on top': 'Το μικρό bezel πάντα μπροστά',
+  'Named with': 'Όνομα με', 'Frame number': 'Αριθμό καρέ', 'Kinds': 'Είδη',
+  'Turn on the groups you want and press Apply once. The Mac asks you to confirm each kind it does not know yet; RoarPlay asks first for the general kinds (two questions), then only for what is still missing.': 'Άνοιξε τις ομάδες που θες και πάτα Apply μία φορά. Το Mac ζητά επιβεβαίωση για κάθε είδος που δεν ξέρει ακόμα· το RoarPlay ζητά πρώτα τα γενικά είδη (δύο ερωτήσεις) και μετά μόνο ό,τι λείπει.',
+  'Common video': 'Συνηθισμένο βίντεο', 'Camera and broadcast': 'Κάμερα και τηλεόραση', 'Web and old video': 'Web και παλιό βίντεο', 'Raw picture streams': 'Σκέτες ροές εικόνας', 'Music': 'Μουσική', 'Studio sound': 'Ήχος στούντιο', 'Cinema sound': 'Ήχος κινηματογράφου', 'Other sound': 'Άλλος ήχος',
+  'RoarPlay now opens {n} of the {m} kinds you chose.': 'Το RoarPlay ανοίγει τώρα {n} από τα {m} είδη που διάλεξες.',
   'Centre only': 'Μόνο το κέντρο', 'Surrounds only': 'Μόνο τα surround', 'Add a marker': 'Βάλε marker', 'Rating 1 to 5': 'Βαθμολογία 1 ως 5',
 };
 const t = (en, vars = {}) => {
@@ -98,7 +113,7 @@ function applyLang() {
   for (const el of $$('[data-i18n-label]')) { const k = el.dataset.i18nLabel; el.setAttribute('aria-label', t(k)); el.title = t(k); }
   drawKeys();
   if (cur) { drawFacts(); drawSubsList(); drawTracks(); }
-  drawQueue(); drawDevices(); showSnapDir();
+  drawQueue(); drawDevices(); showSnapDir(); if (typeof drawGroups === 'function') drawGroups();
   placeLenses();
 }
 
@@ -234,6 +249,9 @@ async function load(item, { autoplay = true, at = null, track = 0, mode = null }
   const plan = item.plan;
   cur = main.cur = { item, info: item.info, plan, mode: mode || plan.mode, track, subs: null, subTrack: null };
   inPt = outPt = null;
+  if (!S.keepLook) { Object.assign(S, { aspect: 0, zoom: 1, rot: 0, flipH: false, flipV: false, brightness: 1, contrast: 1, saturation: 1 }); lutCur = null; S.lutFile = ''; applyPicture(); }
+  if (!S.keepSound) { Object.assign(S, { chan: 'stereo', audDelay: 0, eq: [0, 0, 0, 0, 0, 0, 0, 0, 0, 0] }); applyAudio(); }
+  if (autoplay && !S.autoplayOpen && !item.wasAsked) autoplay = false;
   packetsOf = null; qcOf = null; drawGop(); drawQc(); drawNotes();
   // where it was left (Settings > Go on where you left off)
   if (at == null) { const was = S.resume ? positions[item.file] : 0; at = was && item.info.duration && was > 5 && was < item.info.duration - 5 ? was : 0; }
@@ -251,10 +269,10 @@ async function load(item, { autoplay = true, at = null, track = 0, mode = null }
   if (sound) showSound();
   wave = null; drawWave(); thumbs.clear(); resetLufs(); drawMeters();
   if (sound) window.api.waveform({ file: item.file, track, duration: item.info.duration }).then((p) => { if (token === loadToken) { wave = p; drawWave(); } });
+  if (hasPicture() && item.info.video.width) fitWindowFor(item.info.video.width / item.info.video.height, true);
   await startAt(main, at, autoplay);
   if (token !== loadToken) return;
   loadSubtitles(token);
-  if (hasPicture()) fitWindow(true);
   if (B.cur) syncB(true);
 }
 
@@ -296,8 +314,17 @@ async function startAt(pl, at, play) {
   for (const P of Object.values(parts)) P.sb.addEventListener('error', () => fail(pl, 'The window could not take the stream'));
   pl.mse = { ms, parts, token };
   el.currentTime = at;
+  pl.wantPlay = !!play;
   for (const P of Object.values(parts)) feed(pl, P, at);
-  if (play) el.play().catch(() => {});
+}
+const LEAD = 2; // seconds that must have come before a stream starts playing
+function maybeStart(pl) {
+  if (!pl.wantPlay || !pl.mse) return;
+  const ct = pl.v.currentTime;
+  const ready = Object.values(pl.mse.parts).every((P) => { const rg = rangeAt(P.sb, ct, 0.1); return rg && (rg[1] - ct >= LEAD || P.atEnd); });
+  if (!ready) return;
+  pl.wantPlay = false;
+  pl.v.play().catch(() => {});
 }
 main.startToken = 0; B.startToken = 0;
 
@@ -348,6 +375,7 @@ async function feed(pl, P, from) {
       if (done) { P.atEnd = !d || P.pos >= d - 1; break; }
       await append(P, value, el);
       if (stale()) { reader.cancel(); return; }
+      maybeStart(pl);
       const rg = rangeAt(P.sb, P.pos, 0.6);
       if (!rg) continue;
       const was = P.pos;
@@ -359,6 +387,7 @@ async function feed(pl, P, from) {
     if (!stale()) console.warn('feed', P.name, e);
   }
   P.busy = false; P.reader = null;
+  maybeStart(pl);
   endIfAll(m);
 }
 // the end of the file: when every part has come to it, the window is told, so it ends there
@@ -401,8 +430,9 @@ function seek(t, { back = 0, play = null } = {}) {
   t = Math.max(0, d ? Math.min(t, Math.max(0, d - 1 / fps() / 2)) : t);
   shownTime = t;
   v.currentTime = t;
-  if (main.mse) for (const P of Object.values(main.mse.parts)) if (!rangeAt(P.sb, t, 0)) feed(main, P, Math.max(0, t - back));
-  if (play) v.play().catch(() => {});
+  let gap = false;
+  if (main.mse) for (const P of Object.values(main.mse.parts)) if (!rangeAt(P.sb, t, 0)) { gap = true; feed(main, P, Math.max(0, t - back)); }
+  if (play) { if (gap) main.wantPlay = true; else v.play().catch(() => {}); }
   if (B.cur) syncB(true);
   paint();
 }
@@ -712,9 +742,10 @@ async function loadSubtitles(token) {
   if (token !== loadToken) return;
   for (const f of beside) subChoices.push({ kind: 'file', file: f.file, label: f.name, where: f.lang?.toUpperCase() || '' });
   drawSubsList();
-  // the first track, or the first file beside, by itself
-  const first = subChoices.find((c) => !c.bitmap);
-  if (first && S.subOn) chooseSubs(first); else { cur.subs = null; paintSubs(0); }
+  // the preferred language first, else the first track, or the first file beside, by itself
+  const lang = (S.subLang || '').toLowerCase();
+  const first = (lang && subChoices.find((c) => !c.bitmap && (c.label.toLowerCase().startsWith(lang) || (c.where || '').toLowerCase() === lang))) || subChoices.find((c) => !c.bitmap);
+  if (first && S.subOn && S.subAuto) chooseSubs(first); else { cur.subs = null; paintSubs(0); }
 }
 async function chooseSubs(choice) {
   if (!cur) return;
@@ -815,15 +846,18 @@ function placeMask() {
 }
 // the window takes the picture's shape (Alex, 31 Oct): the picture's ratio, plus what sits around the picture
 function fitWindow(resize) {
-  if (!S.followPic || !cur || !hasPicture() || !v.videoWidth || document.fullscreenElement) { window.api.fit({ ratio: 0 }); return; }
+  if (!cur || !hasPicture() || !v.videoWidth) { window.api.fit({ ratio: 0 }); return; }
+  fitWindowFor(v.videoWidth / v.videoHeight, resize);
+}
+function fitWindowFor(picRatio, resize) {
+  if (!S.followPic || document.fullscreenElement) { window.api.fit({ ratio: 0 }); return; }
   const box = $('#pic').getBoundingClientRect();
   const extra = { width: window.innerWidth - box.width, height: window.innerHeight - box.height };
-  let ratio = v.videoWidth / v.videoHeight;
+  let ratio = picRatio;
   if (S.rot % 180) ratio = 1 / ratio;
   if (+S.aspect) ratio = +S.aspect;
   window.api.fit({ ratio, extra, resize });
 }
-v.addEventListener('loadedmetadata', () => { if (cur && hasPicture()) setTimeout(() => fitWindow(true), 50); });
 function resetPicture() { Object.assign(S, { fitMode: 'contain', aspect: 0, zoom: 1, rot: 0, flipH: false, flipV: false, brightness: 1, contrast: 1, saturation: 1 }); save(); applyPicture(); fitWindow(false); }
 $('#pictureReset').addEventListener('click', resetPicture);
 for (const k of ['brightness', 'contrast', 'saturation']) $('#' + k).addEventListener('input', (e) => { S[k] = +e.target.value; save(); applyPicture(); });
@@ -887,10 +921,10 @@ async function drawDevices() {
   const sel = $('#outDevice');
   let list = [];
   try { list = (await navigator.mediaDevices.enumerateDevices()).filter((d) => d.kind === 'audiooutput'); } catch {}
-  sel.innerHTML = `<option value="">${esc(t('System default'))}</option>` + list.filter((d) => d.deviceId && d.deviceId !== 'default').map((d) => `<option value="${esc(d.deviceId)}">${esc(d.label || d.deviceId.slice(0, 8))}</option>`).join('');
-  sel.value = list.some((d) => d.deviceId === S.outDevice) ? S.outDevice : '';
+  const html = `<option value="">${esc(t('System default'))}</option>` + list.filter((d) => d.deviceId && d.deviceId !== 'default').map((d) => `<option value="${esc(d.deviceId)}">${esc(d.label || d.deviceId.slice(0, 8))}</option>`).join('');
+  for (const el of [sel, $('#outDevice2')]) { el.innerHTML = html; el.value = list.some((d) => d.deviceId === S.outDevice) ? S.outDevice : ''; }
 }
-$('#outDevice').addEventListener('change', (e) => { S.outDevice = e.target.value; save(); applyAudio(); });
+for (const id of ['outDevice', 'outDevice2']) $('#' + id).addEventListener('change', (e) => { S.outDevice = e.target.value; save(); applyAudio(); drawDevices(); });
 navigator.mediaDevices?.addEventListener?.('devicechange', drawDevices);
 function drawTracks() {
   const box = $('#tracksList');
@@ -930,15 +964,15 @@ document.addEventListener('mousemove', () => {
     if (document.fullscreenElement && !v.paused) $('#stage').classList.add('idle');
     if (!v.paused && !Object.values(POPS).some((id) => !$('#' + id).hidden) && $('#settings').hidden && !document.querySelector('.side:hover')) document.body.classList.add('idle-ui');
     if (document.body.classList.contains('compact')) { document.body.classList.remove('show-bar'); if (!v.paused) document.body.classList.add('idle'); }
-  }, 2200);
+  }, S.idleSecs * 1000 + 200);
 });
 // the small bezel: only the picture inside a thin frame, the controls when the mouse comes
 let compactBefore = null;
 function setCompact(on) {
   const was = document.body.classList.contains('compact');
   if (on === was) return;
-  if (on) { compactBefore = { side: S.side }; S.side = false; }
-  else if (compactBefore) { S.side = compactBefore.side; compactBefore = null; }
+  if (on) { compactBefore = { side: S.side, onTop: S.onTop }; S.side = false; if (S.bezelTop && !S.onTop) window.api.onTop(true); }
+  else if (compactBefore) { S.side = compactBefore.side; if (S.bezelTop && !compactBefore.onTop) window.api.onTop(false); compactBefore = null; }
   setBody('compact', on);
   document.body.classList.toggle('show-bar', on);
   $('#bezelBar').hidden = !on;
@@ -955,7 +989,7 @@ $('#bzTop').addEventListener('click', () => { S.onTop = !S.onTop; save(); $('#on
 // ---------- The snapshot: the frame on screen, at full size, as a picture ----------
 async function snapshot() {
   if (!cur || !hasPicture()) return;
-  const label = clockText(shownTime).replace(/[:;]/g, '-');
+  const label = (S.snapName === 'time' ? fmtTime(shownTime) : S.snapName === 'frame' ? `f${frameOf(shownTime)}` : clockText(shownTime)).replace(/[:;]/g, '-');
   const r = await window.api.snapshot({ file: cur.item.file, at: shownTime - 0.25 / fps(), label, info: cur.info, format: S.snapFormat, where: S.snapWhere, folder: S.snapDir });
   if (!r.ok) return toast(esc(t('The frame could not be saved')) + (r.error ? `: ${esc(r.error)}` : ''));
   const name = r.out.split(/[\\/]/).pop();
@@ -1036,7 +1070,8 @@ function toast(html) {
   clearTimeout(toastTimer); toastTimer = setTimeout(() => { el.hidden = true; }, 5000);
 }
 // the segmented choices: which one is on comes from S (or the side tab)
-const SEG_VAL = { sideTab: () => S.sideTab, fitMode: () => S.fitMode, playQuality: () => String(S.playQuality), seqFps: () => String(S.seqFps), scopeKind: () => S.scopeKind, cmpMode: () => S.cmpMode };
+const MIRROR = { fitMode2: 'fitMode', subSize2: 'subSize' };
+const SEG_VAL = { sideTab: () => S.sideTab, fitMode: () => S.fitMode, fitMode2: () => S.fitMode, subSize2: () => S.subSize, playQuality: () => String(S.playQuality), seqFps: () => String(S.seqFps), jumpSecs: () => String(S.jumpSecs), idleSecs: () => String(S.idleSecs), scopeKind: () => S.scopeKind, cmpMode: () => S.cmpMode };
 function placeLenses() {
   for (const seg of $$('.seg')) {
     const id = seg.id;
@@ -1058,7 +1093,9 @@ for (const seg of $$('.seg')) {
     if (!b) return;
     const val = b.dataset.v;
     if (seg.id === 'sideTab') { S.sideTab = val; showSideTab(); }
-    else if (seg.id === 'fitMode') { S.fitMode = val; applyPicture(); }
+    else if (seg.id === 'fitMode' || seg.id === 'fitMode2') { S.fitMode = val; applyPicture(); }
+    else if (seg.id === 'subSize2') { S.subSize = val; applySubSize(); }
+    else if (seg.id === 'jumpSecs' || seg.id === 'idleSecs') { S[seg.id] = +val; }
     else if (seg.id === 'playQuality') { S.playQuality = +val; if (cur?.mode === 'transcode') { const at = pos(), p = !v.paused; startAt(main, at, p); } }
     else if (seg.id === 'scopeKind') { S.scopeKind = val; drawScopeNow(); }
     else if (seg.id === 'cmpMode') { S.cmpMode = val; applyCompare(); }
@@ -1129,8 +1166,8 @@ document.addEventListener('keydown', (e) => {
   if (k === 'k') { kDown = true; return K(); }
   if (k === 'j') return kDown ? step(-1) : J();
   if (k === 'l') return kDown ? step(1) : L();
-  if (e.key === 'ArrowLeft') { e.preventDefault(); return e.shiftKey ? (v.pause(), seek(pos() - 1)) : step(-1); }
-  if (e.key === 'ArrowRight') { e.preventDefault(); return e.shiftKey ? (v.pause(), seek(pos() + 1)) : step(1); }
+  if (e.key === 'ArrowLeft') { e.preventDefault(); return e.shiftKey ? (v.pause(), seek(pos() - S.jumpSecs)) : step(-1); }
+  if (e.key === 'ArrowRight') { e.preventDefault(); return e.shiftKey ? (v.pause(), seek(pos() + S.jumpSecs)) : step(1); }
   if (e.key === 'ArrowUp') { e.preventDefault(); return setVolume(S.volume + 0.05); }
   if (e.key === 'ArrowDown') { e.preventDefault(); return setVolume(S.volume - 0.05); }
   if (e.key === 'PageUp') { e.preventDefault(); return chapterStep(-1); }
@@ -1187,7 +1224,7 @@ $('#queue').addEventListener('click', (e) => {
     return drawQueue();
   }
   const li = e.target.closest('li[data-i]');
-  if (li) load(queue[+li.dataset.i], { autoplay: true });
+  if (li) { queue[+li.dataset.i].wasAsked = true; load(queue[+li.dataset.i], { autoplay: true }); }
 });
 // a web address
 function urlOpen(on) { $('#urlVeil').hidden = !on; if (on) { $('#urlField').value = ''; $('#urlField').focus(); } }
@@ -1196,24 +1233,62 @@ $('#openUrl').addEventListener('click', () => urlOpen(true));
 $('#urlCancel').addEventListener('click', () => urlOpen(false));
 $('#urlGo').addEventListener('click', urlGo);
 $('#urlVeil').addEventListener('click', (e) => { if (e.target.id === 'urlVeil') urlOpen(false); });
-// Open with RoarPlay: the kinds to tick, kept between sessions, applied with one press
-const COMMON = ['mp4', 'mov', 'mkv', 'mxf', 'avi', 'mp3', 'wav', 'aiff', 'flac', 'm4a'];
-window.api.fileKinds().then((k) => {
-  const ticked = new Set(fetchStore('defaultExts', COMMON));
-  for (const [id, list] of [['extsVideo', k.video], ['extsAudio', k.audio]]) $('#' + id).innerHTML = list.map((e) => `<label><input type="checkbox" value="${e}" ${ticked.has(e) ? 'checked' : ''}>${e}</label>`).join('');
+// Open with RoarPlay (Alex, 31 Oct): the kinds in groups with a switch; the Mac is asked first for the general kinds
+// (two questions), then only for the kinds it still gives to another app
+const EXT_GROUPS = [
+  ['video', 'Common video', ['mp4', 'mov', 'm4v', 'mkv', 'webm', 'avi']],
+  ['video', 'Camera and broadcast', ['mxf', 'mts', 'm2ts', 'mpg', 'mpeg', 'ts', 'vob', 'dv', 'dif', 'tod', 'mod', 'm2v', 'mpv', 'qt', 'gif']],
+  ['video', 'Web and old video', ['wmv', 'asf', 'flv', 'f4v', '3gp', '3g2', 'ogv', 'rm', 'rmvb', 'divx', 'xvid', 'mjpeg', 'mjpg', 'swf', 'amv', 'nsv', 'evo', 'apng']],
+  ['video', 'Raw picture streams', ['h264', '264', 'h265', '265', 'hevc', 'y4m', 'nut', 'ivf']],
+  ['audio', 'Music', ['mp3', 'm4a', 'm4b', 'aac', 'flac', 'ogg', 'oga', 'opus', 'wma', 'alac']],
+  ['audio', 'Studio sound', ['wav', 'wave', 'bwf', 'aiff', 'aif', 'aifc', 'caf', 'w64', 'rf64']],
+  ['audio', 'Cinema sound', ['ac3', 'eac3', 'ec3', 'dts', 'dtshd', 'thd', 'mlp', 'mka']],
+  ['audio', 'Other sound', ['adts', 'ape', 'wv', 'tta', 'amr', 'awb', 'au', 'snd', 'mp2', 'mpa', 'mp1', 'ra', 'spx', 'gsm', 'voc', 'mid', 'midi', 'dsf', 'dff', 'tak', 'ofr', 'mpc', 'xm', 's3m', 'it']],
+];
+let extOn = new Set(fetchStore('defaultExts', EXT_GROUPS.slice(0, 1).concat(EXT_GROUPS.slice(4, 6)).flatMap((g) => g[2])));
+let extMine = {}; // ext -> true when the Mac already opens it with RoarPlay
+function drawGroups() {
+  $('#extGroups').innerHTML = EXT_GROUPS.map(([, name, exts], i) => {
+    const on = exts.filter((e) => extOn.has(e)).length, mine = exts.filter((e) => extMine[e]).length;
+    const state = mine === exts.length ? `<span class="state all">✓ RoarPlay</span>` : mine ? `<span class="state some">${mine}/${exts.length} RoarPlay</span>` : '<span class="state"></span>';
+    return `<div class="grp" data-g="${i}"><div class="grp-row"><span><b>${esc(t(name))}</b><small>${esc(exts.join(' · '))}</small></span>${state}
+      <label class="check sm"><input type="checkbox" data-grp="${i}" ${on === exts.length ? 'checked' : ''}></label><button class="ib open" data-open="${i}" aria-label="Kinds"><svg viewBox="0 0 24 24"><path d="M6 9l6 6 6-6"/></svg></button></div>
+      <div class="grp-kinds">${exts.map((e) => `<button class="kind-pill ${extOn.has(e) ? 'on' : ''} ${extMine[e] ? 'mine' : ''}" data-ext="${e}"><i></i>${e}</button>`).join('')}</div></div>`;
+  }).join('');
+}
+$('#extGroups').addEventListener('click', (e) => {
+  const open = e.target.closest('[data-open]'); if (open) { open.closest('.grp').classList.toggle('open'); return; }
+  const pill = e.target.closest('[data-ext]'); if (pill) { const x = pill.dataset.ext; if (extOn.has(x)) extOn.delete(x); else extOn.add(x); store('defaultExts', [...extOn]); const o = pill.closest('.grp').classList.contains('open'); drawGroups(); if (o) $(`.grp[data-g="${pill.closest('.grp').dataset.g}"]`).classList.add('open'); }
 });
-const tickedExts = () => $$('.exts input:checked').map((i) => i.value);
-document.addEventListener('change', (e) => { if (e.target.closest('.exts')) store('defaultExts', tickedExts()); });
-document.addEventListener('click', (e) => {
-  const b = e.target.closest('.lnk'); if (!b) return;
-  const box = b.dataset.all ? '#exts' + (b.dataset.all === 'video' ? 'Video' : 'Audio') : '#exts' + (b.dataset.none === 'video' ? 'Video' : 'Audio');
-  for (const i of $$(box + ' input')) i.checked = !!b.dataset.all;
-  store('defaultExts', tickedExts());
+$('#extGroups').addEventListener('change', (e) => {
+  const cb = e.target.closest('[data-grp]'); if (!cb) return;
+  for (const x of EXT_GROUPS[+cb.dataset.grp][2]) { if (cb.checked) extOn.add(x); else extOn.delete(x); }
+  store('defaultExts', [...extOn]); drawGroups();
 });
+async function checkDefaults() {
+  const r = await window.api.defaultStatus(EXT_GROUPS.flatMap((g) => g[2]));
+  if (!r.ok) return;
+  extMine = {}; for (const [k, val] of Object.entries(r.map)) extMine[k] = /roarplay/i.test(val);
+  drawGroups();
+}
+$('#defaultCheck').addEventListener('click', checkDefaults);
 $('#defaultApply').addEventListener('click', async () => {
-  const r = await window.api.setDefault(tickedExts());
-  $('#defaultsText').textContent = r.opened ? t('Pick RoarPlay in the window that opened.') : r.ok ? t('RoarPlay now opens {n} kinds of file.', { n: r.done }) : `${t('It could not be set')}: ${r.error || r.detail || ''}`;
+  const want = [...extOn]; if (!want.length) return;
+  $('#defaultsText').textContent = '…';
+  // the general kinds first, then whatever the Mac still gives to another app
+  let r = await window.api.setDefault({ broad: true });
+  if (r.opened) { $('#defaultsText').textContent = t('Pick RoarPlay in the window that opened.'); return; }
+  if (!r.ok) { $('#defaultsText').textContent = `${t('It could not be set')}: ${r.error || ''}`; return; }
+  await checkDefaults();
+  const left = want.filter((x) => !extMine[x]);
+  let done = 0;
+  if (left.length) { r = await window.api.setDefault({ exts: left }); if (r.ok) done = r.done; }
+  await checkDefaults();
+  const mine = want.filter((x) => extMine[x]).length;
+  $('#defaultsText').textContent = t('RoarPlay now opens {n} of the {m} kinds you chose.', { n: mine, m: want.length }) + (r.detail ? ` (${r.detail})` : '');
 });
+drawGroups();
+
 // the tools behind the ⋯ button; the controls fade while it plays and the mouse rests
 $('#moreBtn').addEventListener('click', (e) => { e.stopPropagation(); setBody('more-open', !document.body.classList.contains('more-open')); placeLenses(); });
 $('#quiet').checked = S.quiet; setBody('quiet', S.quiet);
@@ -1261,7 +1336,13 @@ $('#autoUpdate').addEventListener('input', (e) => { S.autoUpdate = e.target.chec
 $('#update').addEventListener('click', () => window.api.update.install());
 $('#updRestart').addEventListener('click', () => window.api.update.install());
 $('#updCheck').addEventListener('click', () => { showUpdate({ ...upd, status: 'checking' }); window.api.update.check().then(showUpdate); });
-const setOpen = (on) => { $('#settings').hidden = !on; if (on) { showUpdate(); placeLenses(); $('#closeSettings').focus(); } };
+const setOpen = (on) => { $('#settings').hidden = !on; if (on) { showUpdate(); placeLenses(); drawDevices(); if (platform === 'darwin') checkDefaults(); $('#closeSettings').focus(); } };
+function showPage(name) {
+  for (const b of $$('.set-nav button[data-page]')) b.classList.toggle('on', b.dataset.page === name);
+  for (const p of $$('.set-page')) p.hidden = p.dataset.page !== name;
+  placeLenses();
+}
+$('.set-nav').addEventListener('click', (e) => { const b = e.target.closest('button[data-page]'); if (b) showPage(b.dataset.page); });
 $('#openSettings').addEventListener('click', () => setOpen(true));
 $('#closeSettings').addEventListener('click', () => setOpen(false));
 $('#settings').addEventListener('click', (e) => { if (e.target.id === 'settings') setOpen(false); });
@@ -1695,8 +1776,16 @@ $('#screen').classList.add('blank');
 setVolume(S.volume);
 setMuted(S.muted);
 v.preservesPitch = S.keepPitch;
-$('#keepPitch').checked = S.keepPitch;
+$('#keepPitch').checked = $('#keepPitch2').checked = S.keepPitch;
+$('#keepPitch2').addEventListener('input', (e) => { S.keepPitch = e.target.checked; $('#keepPitch').checked = S.keepPitch; v.preservesPitch = S.keepPitch; save(); });
 $('#resume').checked = S.resume;
+for (const [id, key] of [['keepQueue', 'keepQueue'], ['autoplayOpen', 'autoplayOpen'], ['keepLook', 'keepLook'], ['keepSound', 'keepSound'], ['subAuto', 'subAuto'], ['sideStart', 'sideStart'], ['bezelTop', 'bezelTop']]) {
+  $('#' + id).checked = S[key];
+  $('#' + id).addEventListener('input', (e) => { S[key] = e.target.checked; save(); });
+}
+$('#subLang').value = S.subLang; $('#subLang').addEventListener('input', (e) => { S.subLang = e.target.value.trim().toLowerCase(); save(); });
+if (S.startVolume === 'full') S.volume = 1;
+S.side = S.sideStart;
 $('#followPic').checked = $('#followPic2').checked = S.followPic;
 $('#onTop').checked = S.onTop; if (S.onTop) window.api.onTop(true);
 $('#bzTop').classList.toggle('on', S.onTop);
@@ -1709,7 +1798,7 @@ showSideTab();
 applyLang();
 drawFacts();
 // the queue from last time, not playing by itself
-queue = fetchStore('queue', []).filter((q) => q && q.file);
+queue = S.keepQueue ? fetchStore('queue', []).filter((q) => q && q.file) : [];
 if (queue.length) { drawQueue(); probeQueue(); }
 window.addEventListener('resize', placeLenses);
 if (S.lutFile) window.api.readLut(S.lutFile).then((r) => { if (r.lut) setLut(r); });

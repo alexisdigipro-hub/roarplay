@@ -255,48 +255,33 @@ ipcMain.handle('on-top', (_e, on) => { if (win) win.setAlwaysOnTop(!!on, 'floati
 // Open with RoarPlay (Alex, 31 Oct): on a Mac the helper tells the system; on Windows the system's own page opens,
 // where the person picks RoarPlay (Windows lets no app do that for itself)
 ipcMain.handle('file-kinds', () => ({ video: media.VIDEO_EXT, audio: media.AUDIO_EXT }));
-ipcMain.handle('set-default', (_e, exts) => {
-  if (!Array.isArray(exts) || !exts.length) return { ok: false, error: 'Nothing ticked' };
-  if (process.platform === 'win32') { shell.openExternal('ms-settings:defaultapps?registeredAppUser=RoarPlay').catch(() => shell.openExternal('ms-settings:defaultapps')); return { ok: true, opened: true }; }
-  if (process.platform !== 'darwin') return { ok: false, error: 'Only on a Mac or Windows' };
+// the helper that talks to the Mac about file kinds (helper/setdefault.swift); `mode` is '--status', '--broad' or ''
+function runHelper(mode, exts) {
   const helper = path.join(process.resourcesPath, 'bin', 'setdefault');
-  if (!app.isPackaged || !fs.existsSync(helper)) return { ok: false, error: 'The helper is missing (it comes with the installed app)' };
+  if (!app.isPackaged || !fs.existsSync(helper)) return Promise.resolve({ ok: false, error: 'The helper is missing (it comes with the installed app)' });
   return new Promise((resolve) => {
-    require('child_process').execFile(helper, ['com.themadlions.roarplay', ...exts], { timeout: 20000 }, (e, out) => {
-      if (e) return resolve({ ok: false, error: e.message });
-      const lines = String(out).trim().split('\n');
-      const done = lines.filter((l) => /=ok$/.test(l)).length;
-      resolve({ ok: done > 0, done, of: exts.length, detail: lines.filter((l) => !/=ok$/.test(l)).join(', ') });
+    require('child_process').execFile(helper, ['com.themadlions.roarplay', ...(mode ? [mode] : []), ...exts], { timeout: 120000, maxBuffer: 1 << 20 }, (e, out) => {
+      if (e && !out) return resolve({ ok: false, error: e.message });
+      const map = {};
+      for (const l of String(out).trim().split('\n')) { const i = l.indexOf('='); if (i > 0) map[l.slice(0, i)] = l.slice(i + 1); }
+      resolve({ ok: true, map });
     });
   });
+}
+// which app opens each kind now (a Mac only): ext -> bundle id
+ipcMain.handle('default-status', async (_e, exts) => {
+  if (process.platform !== 'darwin') return { ok: false };
+  return runHelper('--status', exts);
 });
-
-// the professional side (0.3): the packets, the QC report, a LUT, the notes saved out
-const scans = new Map(); // file -> packets, kept while the app runs
-ipcMain.handle('packets', async (_e, { file, info }) => {
-  if (scans.has(file)) return scans.get(file);
-  const pk = await media.packets(file, info, { onProgress: (p) => win?.webContents.send('scan-progress', { file, p }) });
-  if (scans.size > 20) scans.delete(scans.keys().next().value);
-  scans.set(file, pk);
-  return pk;
-});
-ipcMain.handle('qc', (_e, { file, info }) => media.qc(file, info, { onProgress: (p) => win?.webContents.send('qc-progress', { file, p }) }));
-ipcMain.handle('pick-lut', async () => {
-  const r = await dialog.showOpenDialog(win, { properties: ['openFile'], filters: [{ name: 'LUT (.cube)', extensions: ['cube'] }] });
-  if (r.canceled) return null;
-  try { return { file: r.filePaths[0], lut: media.parseCube(fs.readFileSync(r.filePaths[0], 'utf8')) }; } catch (e) { return { file: r.filePaths[0], error: e.message }; }
-});
-ipcMain.handle('read-lut', (_e, file) => { try { return { file, lut: media.parseCube(fs.readFileSync(file, 'utf8')) }; } catch (e) { return { file, error: e.message }; } });
-ipcMain.handle('pick-one', async (_e, lang) => {
-  const r = await dialog.showOpenDialog(win, { properties: ['openFile'], filters: [{ name: lang === 'el' ? 'Βίντεο και ήχος' : 'Video and sound', extensions: ALL }, { name: lang === 'el' ? 'Όλα τα αρχεία' : 'All files', extensions: ['*'] }] });
-  return r.canceled ? null : r.filePaths[0];
-});
-// the notes (markers, rating, the QC report) saved as a text file the person names: CSV, EDL or plain text
-ipcMain.handle('save-text', async (_e, { name, text, ext, lang }) => {
-  const r = await dialog.showSaveDialog(win, { defaultPath: path.join(app.getPath('documents'), name), filters: [{ name: ext.toUpperCase(), extensions: [ext] }] });
-  if (r.canceled || !r.filePath) return null;
-  fs.writeFileSync(r.filePath, text);
-  return r.filePath;
+ipcMain.handle('set-default', async (_e, { exts, broad }) => {
+  if (process.platform === 'win32') { shell.openExternal('ms-settings:defaultapps?registeredAppUser=RoarPlay').catch(() => shell.openExternal('ms-settings:defaultapps')); return { ok: true, opened: true }; }
+  if (process.platform !== 'darwin') return { ok: false, error: 'Only on a Mac or Windows' };
+  if (broad) return runHelper('--broad', []);
+  if (!Array.isArray(exts) || !exts.length) return { ok: false, error: 'Nothing ticked' };
+  const r = await runHelper('', exts);
+  if (!r.ok) return r;
+  const vals = Object.values(r.map);
+  return { ok: true, done: vals.filter((x) => x === 'ok').length, same: vals.filter((x) => x === 'same').length, of: exts.length, map: r.map, detail: Object.entries(r.map).filter(([, v]) => !['ok', 'same'].includes(v)).map(([k, v]) => `${k}: ${v}`).join(', ') };
 });
 
 ipcMain.handle('reveal', (_e, file) => shell.showItemInFolder(file));

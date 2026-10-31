@@ -223,64 +223,123 @@
   </div>
 
   <!-- Settings: the language, playing, the window, pictures, updates, the keys. Cmd/Ctrl+, opens it too. -->
+  <!-- Settings (Alex, 31 Oct: "bigger, more settings, in categories"): pages on the right, the list of them on the left -->
   <div class="veil" id="settings" hidden>
-    <div class="sheet" role="dialog" aria-modal="true" aria-labelledby="setTitle">
-      <div class="set-head"><h3 id="setTitle" data-i18n>Settings</h3><button class="ib" id="closeSettings" data-i18n-label="Close" aria-label="Close"><svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></svg></button></div>
+    <div class="sheet set-sheet" role="dialog" aria-modal="true" aria-labelledby="setTitle">
+      <nav class="set-nav">
+        <h3 id="setTitle" data-i18n>Settings</h3>
+        <button class="on" data-page="general" data-i18n>General</button>
+        <button data-page="playing" data-i18n>Playing</button>
+        <button data-page="picture" data-i18n>Picture</button>
+        <button data-page="sound" data-i18n>Sound</button>
+        <button data-page="subs" data-i18n>Subtitles</button>
+        <button data-page="window" data-i18n>Window</button>
+        <button data-page="frames" data-i18n>Saved frames</button>
+        <button data-page="openwith" data-i18n>Open with RoarPlay</button>
+        <button data-page="keys" data-i18n>Keys</button>
+        <span class="spacer"></span>
+        <span class="ver" id="ver2"></span>
+      </nav>
+      <div class="set-pages">
+        <button class="ib set-close" id="closeSettings" data-i18n-label="Close" aria-label="Close"><svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
 
-      <div class="label" data-i18n>Language</div>
-      <div class="set-box">
-        <div class="set-row"><span><span data-i18n>The words of the app</span></span>
-          <div class="seg" id="lang"><button data-v="en">English</button><button data-v="el">Ελληνικά</button></div></div>
+        <section class="set-page" data-page="general">
+          <div class="label" data-i18n>Language</div>
+          <div class="set-box">
+            <div class="set-row"><span><span data-i18n>The words of the app</span></span><div class="seg" id="lang"><button data-v="en">English</button><button data-v="el">Ελληνικά</button></div></div>
+          </div>
+          <div class="label" data-i18n>At start</div>
+          <div class="set-box">
+            <label class="check"><input type="checkbox" id="keepQueue" /><span><span data-i18n>Keep the list between sessions</span><small data-i18n>The files you had lined up are there again when RoarPlay opens.</small></span></label>
+            <label class="check"><input type="checkbox" id="autoplayOpen" /><span><span data-i18n>Play a file as soon as it opens</span><small data-i18n>Off: it opens on its first frame and waits.</small></span></label>
+          </div>
+          <div class="label" data-i18n>Updates</div>
+          <div class="set-box">
+            <div class="set-row"><span><b id="updName">RoarPlay</b><small id="updStatus"></small></span>
+              <button class="btn sm" id="updCheck" data-i18n>Check now</button>
+              <button class="btn sm main" id="updRestart" hidden data-i18n>Restart to update</button></div>
+            <label class="check"><input type="checkbox" id="autoUpdate" /><span><span data-i18n>Update by itself</span><small data-i18n>Looks for a new version every two hours, brings it in the background and puts it in when RoarPlay closes.</small></span></label>
+          </div>
+        </section>
+
+        <section class="set-page" data-page="playing" hidden>
+          <div class="label" data-i18n>Playing</div>
+          <div class="set-box">
+            <div class="set-row"><span><span data-i18n>When a file ends</span></span><div class="seg" id="atEnd"><button data-v="stop" data-i18n>Stop</button><button data-v="next" data-i18n>Next</button><button data-v="repeat" data-i18n>Repeat</button></div></div>
+            <div class="set-row"><span><span data-i18n>The clock shows</span></span><div class="seg" id="clockMode"><button data-v="tc" data-i18n>Timecode</button><button data-v="time" data-i18n>Time</button><button data-v="frames" data-i18n>Frames</button></div></div>
+            <div class="set-row"><span><span data-i18n>Shift with the arrows jumps</span></span><div class="seg" id="jumpSecs"><button data-v="1">1 s</button><button data-v="5">5 s</button><button data-v="10">10 s</button></div></div>
+            <label class="check"><input type="checkbox" id="resume" /><span><span data-i18n>Go on where you left off</span><small data-i18n>A file you had stopped in the middle opens there again.</small></span></label>
+            <label class="check"><input type="checkbox" id="keepPitch2" /><span><span data-i18n>Keep the voices' pitch at other speeds</span></span></label>
+          </div>
+          <div class="label" data-i18n>Made on the fly</div>
+          <div class="set-box">
+            <div class="set-row"><span><span data-i18n>Picture made on the fly</span><small data-i18n>ProRes, DNxHR, MXF and the rest are made H.264 while they play. 1080p is smooth on every computer; Full keeps the size and asks much more of it.</small></span>
+              <div class="seg" id="playQuality"><button data-v="720">720p</button><button data-v="1080">1080p</button><button data-v="0" data-i18n>Full</button></div></div>
+            <div class="set-row"><span><span data-i18n>Image sequences play at</span></span><div class="seg" id="seqFps"><button data-v="24">24</button><button data-v="25">25</button><button data-v="30">30</button></div></div>
+          </div>
+        </section>
+
+        <section class="set-page" data-page="picture" hidden>
+          <div class="label" data-i18n>Picture</div>
+          <div class="set-box">
+            <label class="check"><input type="checkbox" id="followPic2" /><span><span data-i18n>Window takes the picture's shape</span><small data-i18n>On opening, and when you resize it. An aspect chosen in Picture reshapes it too.</small></span></label>
+            <div class="set-row"><span><span data-i18n>A new file opens</span></span><div class="seg" id="fitMode2"><button data-v="contain" data-i18n>Fit</button><button data-v="cover" data-i18n>Fill</button><button data-v="none">1:1</button></div></div>
+            <label class="check"><input type="checkbox" id="keepLook" /><span><span data-i18n>Keep the look from file to file</span><small data-i18n>Aspect, zoom, turn, brightness, contrast, saturation and the LUT stay as you set them. Off: every file opens clean.</small></span></label>
+          </div>
+        </section>
+
+        <section class="set-page" data-page="sound" hidden>
+          <div class="label" data-i18n>Sound</div>
+          <div class="set-box">
+            <div class="set-row"><span><span data-i18n>Output</span></span><select id="outDevice2"></select></div>
+            <div class="set-row"><span><span data-i18n>Volume at start</span></span><div class="seg" id="startVolume"><button data-v="keep" data-i18n>As left</button><button data-v="full">100%</button></div></div>
+            <label class="check"><input type="checkbox" id="keepSound" /><span><span data-i18n>Keep the equalizer and what you hear from file to file</span><small data-i18n>Off: every file opens stereo and flat.</small></span></label>
+          </div>
+        </section>
+
+        <section class="set-page" data-page="subs" hidden>
+          <div class="label" data-i18n>Subtitles</div>
+          <div class="set-box">
+            <label class="check"><input type="checkbox" id="subAuto" /><span><span data-i18n>Show subtitles by themselves</span><small data-i18n>The first track in the file, or the first file beside it.</small></span></label>
+            <div class="set-row"><span><span data-i18n>Size</span></span><div class="seg" id="subSize2"><button data-v="s" data-i18n>Small</button><button data-v="m" data-i18n>Normal</button><button data-v="l" data-i18n>Large</button></div></div>
+            <div class="set-row"><span><span data-i18n>Preferred language</span><small data-i18n>Two letters, as in Film.el.srt: el, en, fr…</small></span><input type="text" id="subLang" maxlength="3" placeholder="el" /></div>
+          </div>
+        </section>
+
+        <section class="set-page" data-page="window" hidden>
+          <div class="label" data-i18n>Window</div>
+          <div class="set-box">
+            <label class="check"><input type="checkbox" id="quiet" /><span><span data-i18n>Only the picture while it plays</span><small data-i18n>The controls fade when the mouse rests, and come back when it moves.</small></span></label>
+            <div class="set-row"><span><span data-i18n>They fade after</span></span><div class="seg" id="idleSecs"><button data-v="1">1 s</button><button data-v="2">2 s</button><button data-v="4">4 s</button></div></div>
+            <label class="check"><input type="checkbox" id="onTop" /><span><span data-i18n>Always on top</span><small data-i18n>Stays over the other windows.</small></span></label>
+            <label class="check"><input type="checkbox" id="sideStart" /><span><span data-i18n>The side open at start</span><small data-i18n>Queue, Info, Scopes and Notes shown when RoarPlay opens.</small></span></label>
+            <label class="check"><input type="checkbox" id="bezelTop" /><span><span data-i18n>The small bezel always on top</span></span></label>
+          </div>
+        </section>
+
+        <section class="set-page" data-page="frames" hidden>
+          <div class="label" data-i18n>Saved frames</div>
+          <div class="set-box">
+            <div class="set-row"><span><span data-i18n>Format</span></span><div class="seg" id="snapFormat"><button data-v="png">PNG</button><button data-v="jpg">JPG</button></div></div>
+            <div class="set-row"><span><span data-i18n>Saved to</span><small id="snapDirText"></small></span><div class="seg" id="snapWhere"><button data-v="beside" data-i18n>Beside the file</button><button data-v="desktop" data-i18n>Desktop</button><button data-v="folder" data-i18n>A folder…</button></div></div>
+            <div class="set-row"><span><span data-i18n>Named with</span></span><div class="seg" id="snapName"><button data-v="tc" data-i18n>Timecode</button><button data-v="time" data-i18n>Time</button><button data-v="frame" data-i18n>Frame number</button></div></div>
+          </div>
+        </section>
+
+        <section class="set-page" data-page="openwith" hidden>
+          <div class="label" data-i18n>Open with RoarPlay</div>
+          <div class="set-box">
+            <div class="set-row"><span><span data-i18n>Double-clicking a file opens it in RoarPlay</span><small data-i18n>Turn on the groups you want and press Apply once. The Mac asks you to confirm each kind it does not know yet; RoarPlay asks first for the general kinds (two questions), then only for what is still missing.</small></span></div>
+            <div class="groups" id="extGroups"></div>
+            <div class="set-row"><span><small id="defaultsText"></small></span><button class="btn sm" id="defaultCheck" data-i18n>Check</button><button class="btn sm main" id="defaultApply" data-i18n>Apply</button></div>
+          </div>
+        </section>
+
+        <section class="set-page" data-page="keys" hidden>
+          <div class="label" data-i18n>Keys</div>
+          <div class="set-box keys-list" id="keysList"></div>
+        </section>
       </div>
-
-      <div class="label" data-i18n>Playing</div>
-      <div class="set-box">
-        <div class="set-row"><span><span data-i18n>When a file ends</span></span>
-          <div class="seg" id="atEnd"><button data-v="stop" data-i18n>Stop</button><button data-v="next" data-i18n>Next</button><button data-v="repeat" data-i18n>Repeat</button></div></div>
-        <div class="set-row"><span><span data-i18n>The clock shows</span></span>
-          <div class="seg" id="clockMode"><button data-v="tc" data-i18n>Timecode</button><button data-v="time" data-i18n>Time</button><button data-v="frames" data-i18n>Frames</button></div></div>
-        <div class="set-row"><span><span data-i18n>Picture made on the fly</span><small data-i18n>ProRes, DNxHR, MXF and the rest are made H.264 while they play. 1080p is smooth on every computer; Full keeps the size and asks much more of it.</small></span>
-          <div class="seg" id="playQuality"><button data-v="1080">1080p</button><button data-v="0" data-i18n>Full</button></div></div>
-        <div class="set-row"><span><span data-i18n>Image sequences play at</span></span>
-          <div class="seg" id="seqFps"><button data-v="24">24</button><button data-v="25">25</button><button data-v="30">30</button></div></div>
-        <label class="check"><input type="checkbox" id="resume" /><span><span data-i18n>Go on where you left off</span><small data-i18n>A file you had stopped in the middle opens there again.</small></span></label>
-      </div>
-
-      <div class="label" data-i18n>Window</div>
-      <div class="set-box">
-        <label class="check"><input type="checkbox" id="followPic2" /><span><span data-i18n>Window takes the picture's shape</span><small data-i18n>On opening, and when you resize it.</small></span></label>
-        <label class="check"><input type="checkbox" id="quiet" /><span><span data-i18n>Only the picture while it plays</span><small data-i18n>The controls fade when the mouse rests, and come back when it moves.</small></span></label>
-        <label class="check"><input type="checkbox" id="onTop" /><span><span data-i18n>Always on top</span><small data-i18n>Stays over the other windows.</small></span></label>
-      </div>
-
-      <div class="label" data-i18n>Saved frames</div>
-      <div class="set-box">
-        <div class="set-row"><span><span data-i18n>Format</span></span>
-          <div class="seg" id="snapFormat"><button data-v="png">PNG</button><button data-v="jpg">JPG</button></div></div>
-        <div class="set-row"><span><span data-i18n>Saved to</span><small id="snapDirText"></small></span>
-          <div class="seg" id="snapWhere"><button data-v="beside" data-i18n>Beside the file</button><button data-v="desktop" data-i18n>Desktop</button><button data-v="folder" data-i18n>A folder…</button></div></div>
-      </div>
-
-      <div class="label" data-i18n>Open with RoarPlay</div>
-      <div class="set-box">
-        <div class="set-row"><span><span data-i18n>Double-clicking a file opens it in RoarPlay</span><small data-i18n>Tick the kinds you want, then Apply once. The Mac asks you to confirm each kind, so tick only what you need.</small></span></div>
-        <div class="ext-head"><b data-i18n>Video</b><button class="lnk" data-all="video" data-i18n>all</button><button class="lnk" data-none="video" data-i18n>none</button></div>
-        <div class="exts" id="extsVideo"></div>
-        <div class="ext-head"><b data-i18n>Sound</b><button class="lnk" data-all="audio" data-i18n>all</button><button class="lnk" data-none="audio" data-i18n>none</button></div>
-        <div class="exts" id="extsAudio"></div>
-        <div class="set-row"><span><small id="defaultsText"></small></span><button class="btn sm main" id="defaultApply" data-i18n>Apply</button></div>
-      </div>
-
-      <div class="label" data-i18n>Updates</div>
-      <div class="set-box">
-        <div class="set-row"><span><b id="updName">RoarPlay</b><small id="updStatus"></small></span>
-          <span class="ver" id="ver2"></span><button class="btn sm" id="updCheck" data-i18n>Check now</button>
-          <button class="btn sm main" id="updRestart" hidden data-i18n>Restart to update</button></div>
-        <label class="check"><input type="checkbox" id="autoUpdate" /><span><span data-i18n>Update by itself</span><small data-i18n>Looks for a new version every two hours, brings it in the background and puts it in when RoarPlay closes.</small></span></label>
-      </div>
-
-      <div class="label" data-i18n>Keys</div>
-      <div class="set-box keys-list" id="keysList"></div>
     </div>
   </div>
 
