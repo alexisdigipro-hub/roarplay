@@ -139,7 +139,17 @@ function registerProtocol() {
   });
 }
 
+// a downloaded app carries the Mac's quarantine mark; the person allowed RoarPlay itself (Open Anyway), but the camera
+// readers in Resources/bin load their makers' libraries, which the Mac refuses to load while marked. RoarPlay takes
+// the mark off its own tools (Alex, 31 Oct: a BRAW clip would not open in the installed 0.4.0, while it did in CI).
+function unquarantineTools() {
+  if (process.platform !== 'darwin' || !app.isPackaged) return;
+  const bin = path.join(process.resourcesPath, 'bin');
+  try { require('child_process').execFile('/usr/bin/xattr', ['-dr', 'com.apple.quarantine', bin], () => {}); } catch {}
+}
+
 app.whenReady().then(() => {
+  unquarantineTools();
   if (offerApplications()) return;
   registerProtocol();
   waiting.push(...filesIn(process.argv));
