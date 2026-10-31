@@ -29,6 +29,13 @@ jobs:
       # the Mac helper that makes RoarPlay the app for a file kind (helper/setdefault.swift), universal
       - if: runner.os == 'macOS'
         run: npm run helper
+      # the Blackmagic RAW reader: the SDK kept in the draft release sdk-braw, built and proved on its sample clip
+      - if: runner.os == 'macOS'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          node scripts/fetch-ffmpeg.js darwin-arm64
+          FFMPEG=vendor/ffmpeg/darwin-arm64/ffmpeg bash scripts/braw-build.sh
       # GitHub's Macs sometimes fail to make a .dmg ("hdiutil: resource busy"): up to three tries
       - if: runner.os == 'macOS'
         shell: bash

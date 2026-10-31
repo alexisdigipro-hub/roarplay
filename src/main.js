@@ -11,7 +11,9 @@ app.setName('RoarPlay');
 
 if (app.isPackaged) {
   media.setFfmpegPath(path.join(process.resourcesPath, 'bin', process.platform === 'win32' ? 'ffmpeg.exe' : 'ffmpeg'));
-}
+  // the Blackmagic RAW reader and the SDK's libraries beside it (a Mac build only)
+  media.setBrawPath(path.join(process.resourcesPath, 'bin', 'roarplay-braw'));
+} else if (process.env.ROARPLAY_BRAW) media.setBrawPath(process.env.ROARPLAY_BRAW);
 
 // rp://play/<id>: what ffmpeg makes while it plays, read by the page and handed to its <video> piece by piece
 protocol.registerSchemesAsPrivileged([{ scheme: 'rp', privileges: { standard: true, secure: true, stream: true, supportFetchAPI: true, corsEnabled: true } }]);
@@ -85,7 +87,7 @@ const running = new Map();  // session id -> ffmpeg process now playing
 let lastId = 0;
 
 function stopAll(ids = null) {
-  for (const [id, p] of running) { if (ids && !ids.includes(id)) continue; try { p.kill('SIGKILL'); } catch {} running.delete(id); }
+  for (const [id, p] of running) { if (ids && !ids.includes(id)) continue; try { p.kill('SIGKILL'); p.reader?.kill('SIGKILL'); } catch {} running.delete(id); }
 }
 
 // ffmpeg's output as the response's body. On a Mac the picture is made with the Mac's own encoder first; if that
@@ -99,6 +101,16 @@ function playStream(s) {
     proc = p;
     running.set(s.id, p);
     let got = false, err = '';
+    // a BRAW clip: the reader decodes, its frames or its sound go into this ffmpeg's stdin
+    if (s.info.braw) {
+      const src = media.brawSource(s.file, s.info, s.part, s.start, s.maxH);
+      const r = spawn(process.env.ROARPLAY_BRAW || path.join(process.resourcesPath, 'bin', 'roarplay-braw'), src.cmd, { windowsHide: true });
+      r.stdout.pipe(p.stdin);
+      r.stdout.on('error', () => {}); p.stdin.on('error', () => {});
+      r.stderr.on('data', (d) => { err = (err + d).slice(-2000); });
+      p.on('close', () => { try { r.kill('SIGKILL'); } catch {} });
+      p.reader = r;
+    }
     p.stdout.on('data', () => { got = true; });
     p.stdout.pipe(out, { end: false });
     p.stderr.on('data', (d) => { err = (err + d).slice(-2000); });
@@ -113,7 +125,7 @@ function playStream(s) {
   };
   run(s.part === 'video' && s.mode === 'transcode' && process.platform === 'darwin');
   // the page let go (another file, a seek, closed): ffmpeg stops
-  out.on('close', () => { if (proc) { try { proc.kill('SIGKILL'); } catch {} if (running.get(s.id) === proc) running.delete(s.id); } });
+  out.on('close', () => { if (proc) { try { proc.kill('SIGKILL'); proc.reader?.kill('SIGKILL'); } catch {} if (running.get(s.id) === proc) running.delete(s.id); } });
   return Readable.toWeb(out);
 }
 
@@ -190,7 +202,7 @@ ipcMain.handle('probe', async (_e, file, opts = {}) => {
   const info = await media.probe(file, opts);
   try { const st = fs.statSync(file); info.file = { size: st.size, created: st.birthtimeMs || st.ctimeMs, modified: st.mtimeMs }; } catch {}
   // where the first frame sits: the frames, the steps and the timecode count from there
-  info.phase = info.video ? Math.max(0, (await media.firstPacket(file, info, 0)).pts) : 0;
+  if (!info.braw) info.phase = info.video ? Math.max(0, (await media.firstPacket(file, info, 0)).pts) : 0;
   // what the page tells its Media Source each part is, for each way of playing it
   const mime = info.video || info.audio.length ? {
     'remux/video': info.video ? media.mimeOf(info, 'remux', 'video') : '', 'transcode/video': info.video ? media.mimeOf(info, 'transcode', 'video') : '',
