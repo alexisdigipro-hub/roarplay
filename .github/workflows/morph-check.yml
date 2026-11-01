@@ -55,8 +55,11 @@ jobs:
           const O = '/tmp/out'; fs.mkdirSync(O, { recursive: true });
           const look = (file, name, at = 1) => {
             const j = `/tmp/look-${name}.jpg`;
-            execFileSync(FF, ['-hide_banner', '-loglevel', 'error', '-y', '-ss', String(at), '-i', file, '-frames:v', '1', '-vf', 'scale=480:-2', '-q:v', '5', j]);
-            console.log(`==LOOK ${name}==\n${fs.readFileSync(j).toString('base64')}\n==END==`);
+            try {
+              if (/\.jpg$/.test(file)) fs.copyFileSync(file, j);
+              else execFileSync(FF, ['-hide_banner', '-loglevel', 'error', '-y', '-ss', String(at), '-i', file, '-frames:v', '1', '-update', '1', '-vf', 'scale=480:-2', '-q:v', '5', j]);
+              console.log(`==LOOK ${name}==\n${fs.readFileSync(j).toString('base64')}\n==END==`);
+            } catch (e) { console.log(`(no look at ${name}: ${e.message.split('\n')[0]})`); }
           };
           (async () => {
             let bad = 0;
