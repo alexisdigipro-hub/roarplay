@@ -1,0 +1,90 @@
+name: RoarMorph on Alex's camera clips
+
+# A check for RoarMorph 0.7.0 (alexisdigipro-hub/roarverter, branch claude/nifty-noether-45fhgg): its Blackmagic RAW and
+# RED path, with the readers it takes from RoarPlay's release, on Alex's own clips kept in this repository's drafts.
+# Lives only on this branch; never merged.
+on:
+  push:
+    branches: [claude/nifty-noether-45fhgg]
+
+permissions:
+  contents: read
+
+jobs:
+  morph:
+    runs-on: macos-latest
+    env:
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          repository: alexisdigipro-hub/roarverter
+          ref: claude/nifty-noether-45fhgg
+          path: morph
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: npm install --no-audit --no-fund
+        working-directory: morph
+      - run: bash scripts/camera-readers.sh
+        working-directory: morph
+      - name: The readers inside the packed app
+        working-directory: morph
+        run: |
+          npx electron-builder --mac dir --arm64 --publish never > eb.log 2>&1 || { tail -40 eb.log; exit 1; }
+          B="out/mac-arm64/RoarMorph.app/Contents/Resources/bin"
+          ls -la "$B"
+          "$B/roarplay-r3d" info /tmp/none.r3d || true
+          "$B/roarplay-braw" info /tmp/none.braw || true
+        env:
+          CSC_IDENTITY_AUTO_DISCOVERY: 'false'
+      - name: Alex's clips
+        run: |
+          gh release download sdk-braw-clip -R "$GITHUB_REPOSITORY" -D /tmp/clip
+          gh release download sdk-r3d-clip -R "$GITHUB_REPOSITORY" -D /tmp/clip
+          for P in /tmp/clip/*.part-aa; do if [ -e "$P" ]; then cat "${P%.part-aa}".part-* > "${P%.part-aa}" && rm "${P%.part-aa}".part-*; fi; done
+          ls -la /tmp/clip
+      - name: RoarMorph converts them
+        working-directory: morph
+        run: |
+          cat > /tmp/run.js <<'JS'
+          const path = require('path'), fs = require('fs'), { execFileSync } = require('child_process');
+          const c = require(path.resolve('src/convert.js'));
+          const FF = path.resolve('vendor/ffmpeg/darwin-arm64/ffmpeg');
+          c.setFfmpegPath(FF); c.setReaders(path.resolve('build/helper'));
+          const O = '/tmp/out'; fs.mkdirSync(O, { recursive: true });
+          const look = (file, name, at = 1) => {
+            const j = `/tmp/look-${name}.jpg`;
+            execFileSync(FF, ['-hide_banner', '-loglevel', 'error', '-y', '-ss', String(at), '-i', file, '-frames:v', '1', '-vf', 'scale=480:-2', '-q:v', '5', j]);
+            console.log(`==LOOK ${name}==\n${fs.readFileSync(j).toString('base64')}\n==END==`);
+          };
+          (async () => {
+            let bad = 0;
+            for (const clip of fs.readdirSync('/tmp/clip').map((f) => path.join('/tmp/clip', f))) {
+              const k = path.extname(clip).slice(1).toLowerCase();
+              const t0 = Date.now();
+              const i = await c.probe(clip);
+              console.log(`\n### ${path.basename(clip)}: ${JSON.stringify({ ...i, camera: undefined })}`);
+              const th = await c.cameraThumb(clip, i);
+              console.log(`thumb: ${th} ${th ? fs.statSync(th).size : 0} bytes`); if (th) look(th, `${k}-thumb`, 0); else bad++;
+              const jobs = [
+                ['mp4', { format: 'mp4-h264', quality: 70, resolution: 1080, trimStart: 0, trimEnd: 3 }],
+                ['prores', { format: 'mov-prores', quality: 80, resolution: 1080, trimStart: 1, trimEnd: 3 }],
+                ['still', { format: 'frame-png', quality: 90, trimStart: 1 }],
+                ['wav', { format: 'wav24', quality: 90, trimEnd: 3 }],
+              ];
+              for (const [n, o] of jobs) {
+                const t = Date.now();
+                try {
+                  const out = await c.convertMedia(`${k}-${n}`, clip, { ...o, suffix: `_${n}`, outputDir: O }, () => {});
+                  const p = await c.probe(out);
+                  console.log(`✓ ${n}: ${path.basename(out)} ${(fs.statSync(out).size / 1e6).toFixed(1)} MB, ${p.vcodec || ''} ${p.width}x${p.height} ${p.duration.toFixed(2)}s sound ${p.hasAudio} (${((Date.now() - t) / 1000).toFixed(1)} s)`);
+                  if (n !== 'wav') look(out, `${k}-${n}`, n === 'mp4' ? 1 : 0);
+                } catch (e) { bad++; console.log(`✗ ${n}: ${e.message}`); }
+              }
+              console.log(`(${((Date.now() - t0) / 1000).toFixed(0)} s for this clip)`);
+            }
+            process.exit(bad ? 1 : 0);
+          })();
+          JS
+          node /tmp/run.js
