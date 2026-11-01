@@ -8,7 +8,7 @@ on:
     branches: [claude/nifty-noether-45fhgg]
 
 permissions:
-  contents: read
+  contents: write
 
 jobs:
   morph:
