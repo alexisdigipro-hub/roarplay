@@ -24,6 +24,8 @@ RoarPlay offers to move itself to Applications; from there it updates itself.
   Info shows the clip's gamma, gamut, LUT and the sizes it decodes at.
 - **REDCODE RAW** (.R3D, on a Mac, since 0.5.0): decoded by RED's own SDK (9.2.1), the same way: the size the screen
   needs, timecode, sound, the camera's name.
+- **Camera RAW resolution** (since 0.5.1, Alex: "no reason to play it full"): a **Full / Half / Low** button in the bar, only
+  for BRAW and R3D clips, decodes at 1/1, 1/2 or 1/4 of the clip's size; Half to start with. A press goes on from the same frame.
 - **Not yet**: ARRIRAW, Canon RAW, Nikon N-RAW, and BRAW and R3D on Windows. RoarPlay says which tool opens each.
 
 What the computer decodes itself (H.264, HEVC, VP9, AV1; AAC, MP3, FLAC, Opus, WAV) plays as it is. Everything else is
@@ -34,6 +36,9 @@ DNxHR, MPEG-2…) is made H.264 on the fly (with the Mac's own encoder), at 1080
 these is happening.
 
 ## The player
+
+- **Turn** (since 0.5.1): the round-arrow button beside Picture turns the picture 90° at each press, fitted whole in the
+  window; Picture > Turn keeps 0°, 90°, 180°, 270° and the flips.
 
 - **Clock**: timecode from the file's own (01:00:00:00, drop-frame as 01:00:00;00), or time, or frames. Click it to switch.
 - **J K L** as in the edit suite: J back, L forward, faster with each press (up to 8×), K stops. K held with J or L: one frame.

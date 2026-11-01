@@ -8,7 +8,7 @@ const DEFAULTS = {
   lang: 'en', autoUpdate: true, atEnd: 'next', clockMode: 'tc', volume: 1, muted: false, side: true, sideTab: 'queue',
   speed: 1, keepPitch: true, subSize: 'm', subDelay: 0, subOn: true,
   fitMode: 'contain', aspect: 0, zoom: 1, rot: 0, flipH: false, flipV: false, brightness: 1, contrast: 1, saturation: 1, followPic: true, onTop: false,
-  playQuality: 1080, brawLook: '709', seqFps: 24, resume: true, snapFormat: 'png', snapWhere: 'beside', snapDir: '',
+  playQuality: 1080, rawScale: 2, brawLook: '709', seqFps: 24, resume: true, snapFormat: 'png', snapWhere: 'beside', snapDir: '',
   chan: 'stereo', audDelay: 0, outDevice: '', eq: [0, 0, 0, 0, 0, 0, 0, 0, 0, 0], shuffle: false,
   scopeKind: 'waveform', keyTicks: false, lutFile: '', lutMix: 1, cmpMode: 'wipe', quiet: true,
   keepQueue: true, autoplayOpen: true, jumpSecs: 1, keepLook: true, startVolume: 'keep', keepSound: true, subAuto: true, subLang: '', idleSecs: 2, sideStart: true, bezelTop: false, snapName: 'tc',
@@ -21,6 +21,7 @@ const fetchStore = (k, d) => { try { return JSON.parse(localStorage.getItem(k)) 
 
 // ---------- Words: English is the key, Greek the choice (as in the other Roar apps) ----------
 const EL = {
+  'Turn the picture 90°': 'Γύρνα την εικόνα 90°', 'Camera RAW: Full, Half or Low resolution while it plays': 'Camera RAW: πλήρης, μισή ή χαμηλή ανάλυση ενώ παίζει', 'Full': 'Full', 'Half': 'Half', 'Low': 'Low',
   'Restart to update': 'Επανεκκίνηση για ενημέρωση', 'Open': 'Άνοιγμα', 'Queue and info': 'Λίστα και πληροφορίες', 'Settings': 'Ρυθμίσεις',
   'Open a web address (Cmd/Ctrl+U)': 'Άνοιγμα διεύθυνσης web (Cmd/Ctrl+U)', 'Open a web address': 'Άνοιγμα διεύθυνσης web',
   'A direct link to a video or sound file (http or https). Pages like YouTube are not links to files: RoarGrab saves those.': 'Ένας άμεσος σύνδεσμος σε αρχείο βίντεο ή ήχου (http ή https). Σελίδες όπως το YouTube δεν είναι σύνδεσμοι αρχείων: αυτές τις κατεβάζει το RoarGrab.',
@@ -289,7 +290,7 @@ async function startAt(pl, at, play) {
   const token = ++pl.startToken;
   const c = pl.cur, el = pl.v;
   const live = () => token === pl.startToken && pl.cur === c;
-  if (pl === main) showSpin(true);
+  if (pl === main) { showSpin(true); showRawRes(); }
   if (c.mode === 'native') {
     closeMse(pl);
     if (el.src !== c.item.url) el.src = c.item.url;
@@ -355,7 +356,7 @@ async function feed(pl, P, from) {
   await idle(P.sb);
   if (stale()) return;
   try { if (m.ms.readyState === 'open') P.sb.abort(); } catch {}
-  const r = await window.api.stream({ file: c.item.file, info: c.info, mode: c.mode, start: from, track: c.track, part: P.name, maxH: +S.playQuality });
+  const r = await window.api.stream({ file: c.item.file, info: c.info, mode: c.mode, start: from, track: c.track, part: P.name, maxH: rawMaxH(c) });
   if (stale()) return;
   P.id = r.id;
   try { P.sb.timestampOffset = r.offset; } catch {}
@@ -730,7 +731,7 @@ function drawWave() {
   }
 }
 setInterval(() => { if (document.body.classList.contains('audio') && !v.paused) drawWave(); }, 150);
-window.addEventListener('resize', () => { drawWave(); placeMask(); placeLenses(); });
+window.addEventListener('resize', () => { drawWave(); placeMask(); placeLenses(); if (S.rot % 180) applyPicture(); });
 
 // ---------- Subtitles: the file's tracks, files beside it, a chosen file; drawn by the page ----------
 let subChoices = []; // { kind: 'track'|'file', n?, file?, label }
@@ -815,7 +816,14 @@ function applySubSize() { document.body.classList.toggle('sub-s', S.subSize === 
 function applyPicture() {
   // with an aspect chosen and the window shaped by it, the picture fills that frame (unless 1:1 was asked)
   v.style.objectFit = +S.aspect && windowFollows() && S.fitMode !== 'none' ? 'cover' : S.fitMode;
-  const tf = [`rotate(${S.rot}deg)`, `scale(${(S.flipH ? -1 : 1) * S.zoom}, ${(S.flipV ? -1 : 1) * S.zoom})`];
+  // turned a quarter, the picture is fitted again so all of it shows (Alex, 1 Nov: it was cut at the top and bottom)
+  let fit = 1
+  if (S.rot % 180 && S.fitMode === 'contain' && v.videoWidth && v.clientWidth) {
+    const W = v.clientWidth, H = v.clientHeight, r = v.videoWidth / v.videoHeight
+    const [cw, ch] = W / H > r ? [H * r, H] : [W, W / r]
+    fit = Math.min(W / ch, H / cw)
+  }
+  const tf = [`rotate(${S.rot}deg)`, `scale(${(S.flipH ? -1 : 1) * S.zoom * fit}, ${(S.flipV ? -1 : 1) * S.zoom * fit})`];
   v.style.transform = tf.join(' ');
   v.style.filter = S.brightness !== 1 || S.contrast !== 1 || S.saturation !== 1 ? `brightness(${S.brightness}) contrast(${S.contrast}) saturate(${S.saturation})` : '';
   for (const k of ['brightness', 'contrast', 'saturation']) { const el = $('#' + k); el.value = S[k]; el.style.setProperty('--p', `${((S[k] - el.min) / (el.max - el.min)) * 100}%`); }
@@ -1110,6 +1118,25 @@ for (const seg of $$('.seg')) {
 $('#speedChips').addEventListener('click', (e) => { const b = e.target.closest('button[data-v]'); if (b) setSpeed(+b.dataset.v); });
 $('#aspectChips').addEventListener('click', (e) => { const b = e.target.closest('button[data-v]'); if (b) { S.aspect = +b.dataset.v; save(); applyPicture(); fitWindow(true); setTimeout(applyPicture, 80); } });
 $('#zoomChips').addEventListener('click', (e) => { const b = e.target.closest('button[data-v]'); if (b) { S.zoom = +b.dataset.v; save(); applyPicture(); } });
+/* camera RAW (BRAW, R3D) plays at Full, Half or Low resolution (Alex, 1 Nov: "no reason to play it full"): the
+   SDK decodes at 1/1, 1/2 or 1/4; the button shows only for those clips, a press goes on from the same frame */
+const RAW_RES = [[1, 'Full'], [2, 'Half'], [4, 'Low']];
+function rawMaxH(c) { return c.info?.braw && c.info.video?.height ? Math.max(1, Math.round(c.info.video.height / (+S.rawScale || 1))) : +S.playQuality; }
+function showRawRes() {
+  const b = $('#rawRes'), raw = !!main.cur?.info?.braw;
+  b.hidden = !raw;
+  if (raw) { const [s, l] = RAW_RES.find((x) => x[0] === +S.rawScale) || RAW_RES[1]; b.textContent = t(l); b.classList.toggle('lit', s !== 1); }
+}
+$('#rawRes').addEventListener('click', () => {
+  const i = RAW_RES.findIndex((x) => x[0] === +S.rawScale);
+  S.rawScale = RAW_RES[(i + 1) % RAW_RES.length][0]; save(); showRawRes();
+  if (main.cur?.info?.braw) { const at = pos(), p = !v.paused; startAt(main, at, p); }
+});
+// a quarter turn at a press, beside the Picture button (Alex, 1 Nov: "I miss a button to turn the picture")
+$('#rotBtn').addEventListener('click', () => {
+  S.rot = (S.rot + 90) % 360; save(); applyPicture(); fitWindow(true);
+  for (const b of $('#rotChips').querySelectorAll('button')) if (!/flip/.test(b.dataset.v)) b.classList.toggle('on', +b.dataset.v === S.rot);
+});
 $('#rotChips').addEventListener('click', (e) => {
   const b = e.target.closest('button[data-v]'); if (!b) return;
   if (b.dataset.v === 'flipH') S.flipH = !S.flipH; else if (b.dataset.v === 'flipV') S.flipV = !S.flipV; else S.rot = +b.dataset.v;
