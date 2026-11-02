@@ -18,9 +18,13 @@ Start a new session by reading this, CLAUDE.md and README.md. Talk to Alex in Gr
   tall); media.js rawBox encodes a RAW picture into <= 3840x2160 / 2560x1440 / 1920x1080; braw.cpp decodes on Metal
   (useMetal; picture read by host pointer, else copied into a CPU resource), back to the CPU when the first frame
   comes back empty, and main.js then sets ROARPLAY_BRAW_CPU for the rest of the session; toRGBA passes RGBA at the
-  asked size on as it is.
+  asked size on as it is. Settings > Playing > Blackmagic RAW is decoded by Graphics / Processor (S.brawDecode, main.js
+  brawCpu). On the CI's virtual GPU Metal was faster at Half (7.6 vs 5.6 fps) and slower at Low (10 vs 19-26): the real
+  Mac decides; Alex is to try both on his clips and say which plays smoother. Metal's picture = CPU's (PSNR 48.7 dB).
 
 ## Alex still has to
+- Update to 0.5.2 and play the 17K and PYXIS clips with the RAW button on Auto; if they still stutter, Settings >
+  Playing > Blackmagic RAW is decoded by: try Processor, and say which is smoother (that becomes the start).
 - Update to 0.5.0 (Restart to update) and check: the BRAW clips (A001, the A038 ones from PYXIS 12K) without stripes,
   and the R3D clip with picture and sound. He wants to check himself before the Lab page says BRAW and RED play.
 

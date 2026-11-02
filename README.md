@@ -31,6 +31,8 @@ RoarPlay offers to move itself to Applications; from there it updates itself.
   Auto. Blackmagic RAW is decoded on the Mac's GPU (Metal) where it can hand the picture back, else on the CPU as before
   (remembered until RoarPlay closes); the picture is made H.264 no larger than 4K (Full), 1440p (Half) or 1080p (Low), so
   the Mac's own encoder always takes it (it stops at 4096x2304: Half of a 12K or 17K clip fell back to the slow software one).
+  Settings > Playing > Blackmagic RAW is decoded by: Graphics (the start) or Processor. Metal's picture equals the CPU's
+  (PSNR 48.7 dB on Alex's clip).
 - **Not yet**: ARRIRAW, Canon RAW, Nikon N-RAW, and BRAW and R3D on Windows. RoarPlay says which tool opens each.
 
 What the computer decodes itself (H.264, HEVC, VP9, AV1; AAC, MP3, FLAC, Opus, WAV) plays as it is. Everything else is
