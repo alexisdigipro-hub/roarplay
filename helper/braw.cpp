@@ -138,6 +138,8 @@ class Callback : public IBlackmagicRawCallback {
     delete idx;
     out->cv.notify_all();
   }
+
+ public:
   Out* out;
   // set when the codec runs on the Mac's GPU (Metal): the picture is read where it lies, through the resource manager
   IBlackmagicRawResourceManager* rm = nullptr;
