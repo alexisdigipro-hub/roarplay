@@ -330,7 +330,7 @@ function streamArgs(file, info, mode, start = 0, { track = 0, hw = false, part =
   const fps = v.fps > 0 && v.fps < 1000 ? v.fps : 25;
   // camera RAW (Alex, 2 Nov: "it stutters, make it play like oil"): whatever size the reader decodes at, the picture is
   // made no larger than a box the Mac's H.264 encoder and the window's decoder take in real time (VideoToolbox stops at
-  // 4096x2304, so Half of a 12K or 17K clip fell back to x264): Full in 4K, Half in 1440p, Low and Proxy in 1080p
+  // 4096x2304, so Half of a 12K or 17K clip fell back to x264): Full in 4K, Half in 1440p, Low in 1080p
   const box = info.braw ? rawBox(brawScale(info.braw.height, maxH)) : null;
   const scale = box
     ? `scale=w='min(iw,${box[0]})':h='min(ih,${box[1]})':force_original_aspect_ratio=decrease:force_divisible_by=2:flags=fast_bilinear`

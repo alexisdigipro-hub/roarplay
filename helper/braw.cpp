@@ -65,6 +65,7 @@ class Callback : public IBlackmagicRawCallback {
         image->GetWidth(&iw) == S_OK && image->GetHeight(&ih) == S_OK && image->GetResourceFormat(&fmt) == S_OK &&
         (data = host(image, data)))
       bytes = toRGBA((const uint8_t*)data, size, iw, ih, fmt);
+    if (copied) { rm->ReleaseResource(gpuContext, gpuQueue, copied, blackmagicRawResourceTypeBufferCPU); copied = nullptr; }
     finish(idx, std::move(bytes));
     job->Release();
   }
@@ -88,9 +89,17 @@ class Callback : public IBlackmagicRawCallback {
     if (image->GetResourceType(&t) != S_OK || t == blackmagicRawResourceTypeBufferCPU) return data;
     void* p = nullptr;
     if (rm && rm->GetResourceHostPointer(gpuContext, gpuQueue, data, t, &p) == S_OK && p) return p;
+    // GPU-only memory (CI, 2 Nov): copied into a CPU buffer of the resource manager, released after the frame is written
+    uint32_t size = 0; image->GetResourceSizeBytes(&size);
+    void* cpuBuf = nullptr;
+    if (rm && size && rm->CreateResource(gpuContext, gpuQueue, size, blackmagicRawResourceTypeBufferCPU, blackmagicRawResourceUsageReadCPUWriteCPU, &cpuBuf) == S_OK && cpuBuf) {
+      if (rm->CopyResource(gpuContext, gpuQueue, data, t, cpuBuf, blackmagicRawResourceTypeBufferCPU, size, false) == S_OK) { copied = cpuBuf; return cpuBuf; }
+      rm->ReleaseResource(gpuContext, gpuQueue, cpuBuf, blackmagicRawResourceTypeBufferCPU);
+    }
     fprintf(stderr, "braw: the picture came in GPU memory (0x%08X) and could not be read\n", (unsigned)t);
     return nullptr;
   }
+  static thread_local void* copied; // the CPU copy of this thread's frame, if one was made
   // what the SDK hands back, made exactly W x H RGBA 8-bit, the size ffmpeg was told: the SDK may decode a camera at
   // another size than asked (a scale it does not offer), pad its rows, or keep another format; any of these, written
   // as they came, shears the picture into grey stripes (Alex's URSA Cine clip, 31 Oct)
@@ -149,6 +158,8 @@ class Callback : public IBlackmagicRawCallback {
   uint32_t W, H;
   IBlackmagicRawClipProcessingAttributes* look;
 };
+
+thread_local void* Callback::copied = nullptr;
 
 // the values the SDK offers for a string attribute (gamma, gamut, LUT mode), as text
 static std::vector<std::string> choices(IBlackmagicRawClipProcessingAttributes* a, BlackmagicRawClipProcessingAttribute what) {

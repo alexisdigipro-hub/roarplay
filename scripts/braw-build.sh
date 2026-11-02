@@ -22,6 +22,8 @@ lipo -info build/helper/BlackmagicRawAPI.framework/BlackmagicRawAPI || true
 H="$SDK/Mac/Include/BlackmagicRawAPI.h"
 grep -n "CreatePipelineDeviceIterator\|SetFromDevice\|GetResourceManager\|GetResourceHostPointer\|blackmagicRawPipelineMetal\|blackmagicRawInteropNone\|IID_IBlackmagicRawConfigurationEx\|class BMD_PUBLIC IBlackmagicRawPipelineDevice\b" "$H" | head -30 || true
 grep -n "class BMD_PUBLIC IBlackmagicRawPipelineDevice " -A 16 "$H" || true
+grep -n "class BMD_PUBLIC IBlackmagicRawResourceManager" -A 12 "$H" || true
+grep -n "blackmagicRawResourceUsage" "$H" | head || true
 for arch in arm64 x86_64; do
   clang++ -std=c++17 -O2 -arch "$arch" -mmacosx-version-min=11.0 -I "$SDK/Mac/Include" \
     helper/braw.cpp "$SDK/Mac/Include/BlackmagicRawAPIDispatch.cpp" \

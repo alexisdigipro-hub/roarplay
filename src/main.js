@@ -90,6 +90,7 @@ function offerApplications() {
 const sessions = new Map(); // id -> { file, info, mode, start, track, part }
 const running = new Map();  // session id -> ffmpeg process now playing
 let lastId = 0;
+let noMetal = false; // set when the BRAW reader fell back from the GPU to the CPU
 
 function stopAll(ids = null) {
   for (const [id, p] of running) { if (ids && !ids.includes(id)) continue; try { p.kill('SIGKILL'); p.reader?.kill('SIGKILL'); } catch {} running.delete(id); }
@@ -109,10 +110,11 @@ function playStream(s) {
     // a BRAW or R3D clip: the camera maker's reader decodes, its frames or its sound go into this ffmpeg's stdin
     if (s.info.braw) {
       const src = media.brawSource(s.file, s.info, s.part, s.start, s.maxH);
-      const r = spawn(media.readerPath(s.info), src.cmd, { windowsHide: true });
+      // a Mac whose GPU could not hand the picture back once is not asked again (each try costs a seek its start)
+      const r = spawn(media.readerPath(s.info), src.cmd, { windowsHide: true, env: noMetal ? { ...process.env, ROARPLAY_BRAW_CPU: '1' } : process.env });
       r.stdout.pipe(p.stdin);
       r.stdout.on('error', () => {}); p.stdin.on('error', () => {});
-      r.stderr.on('data', (d) => { err = (err + d).slice(-2000); });
+      r.stderr.on('data', (d) => { if (/Metal gave no picture|Metal could not/.test(d)) noMetal = true; err = (err + d).slice(-2000); });
       p.on('close', () => { try { r.kill('SIGKILL'); } catch {} });
       p.reader = r;
     }
