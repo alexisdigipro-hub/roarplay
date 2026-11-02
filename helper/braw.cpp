@@ -63,7 +63,7 @@ class Callback : public IBlackmagicRawCallback {
     BlackmagicRawResourceFormat fmt = blackmagicRawResourceFormatRGBAU8;
     if (result == S_OK && image->GetResource(&data) == S_OK && image->GetResourceSizeBytes(&size) == S_OK && data &&
         image->GetWidth(&iw) == S_OK && image->GetHeight(&ih) == S_OK && image->GetResourceFormat(&fmt) == S_OK &&
-        cpu(image))
+        (data = host(image, data)))
       bytes = toRGBA((const uint8_t*)data, size, iw, ih, fmt);
     finish(idx, std::move(bytes));
     job->Release();
@@ -81,13 +81,15 @@ class Callback : public IBlackmagicRawCallback {
   ULONG STDMETHODCALLTYPE Release(void) override { return 0; }
 
  private:
-  static bool cpu(IBlackmagicRawProcessedImage* image) {
+  // the bytes of the picture: as they are from the CPU pipeline; from Metal, the buffer's own memory (on Apple Silicon
+  // the GPU and the CPU share it, so nothing is copied)
+  void* host(IBlackmagicRawProcessedImage* image, void* data) {
     BlackmagicRawResourceType t = blackmagicRawResourceTypeBufferCPU;
-    if (image->GetResourceType(&t) == S_OK && t != blackmagicRawResourceTypeBufferCPU) {
-      fprintf(stderr, "braw: the picture came in GPU memory (0x%08X)\n", (unsigned)t);
-      return false;
-    }
-    return true;
+    if (image->GetResourceType(&t) != S_OK || t == blackmagicRawResourceTypeBufferCPU) return data;
+    void* p = nullptr;
+    if (rm && rm->GetResourceHostPointer(gpuContext, gpuQueue, data, t, &p) == S_OK && p) return p;
+    fprintf(stderr, "braw: the picture came in GPU memory (0x%08X) and could not be read\n", (unsigned)t);
+    return nullptr;
   }
   // what the SDK hands back, made exactly W x H RGBA 8-bit, the size ffmpeg was told: the SDK may decode a camera at
   // another size than asked (a scale it does not offer), pad its rows, or keep another format; any of these, written
@@ -108,6 +110,9 @@ class Callback : public IBlackmagicRawCallback {
     const size_t stride = (size_t)iw * bpp;
     if ((size_t)size < stride * ih) { note("size", fmt, iw, ih, size); return {}; }
     if (iw != W || ih != H) note("scale", fmt, iw, ih, size);
+    // the usual case: RGBA 8-bit at the size asked, handed on as it is (no pixel by pixel copy)
+    if (iw == W && ih == H && fmt == blackmagicRawResourceFormatRGBAU8)
+      return std::vector<uint8_t>(src, src + (size_t)W * H * 4);
     std::vector<uint8_t> o((size_t)W * H * 4);
     for (uint32_t y = 0; y < H; y++) {
       const uint8_t* row = src + (size_t)((uint64_t)y * ih / H) * stride;
@@ -134,6 +139,10 @@ class Callback : public IBlackmagicRawCallback {
     out->cv.notify_all();
   }
   Out* out;
+  // set when the codec runs on the Mac's GPU (Metal): the picture is read where it lies, through the resource manager
+  IBlackmagicRawResourceManager* rm = nullptr;
+  void* gpuContext = nullptr;
+  void* gpuQueue = nullptr;
   BlackmagicRawResolutionScale scale;
   uint32_t W, H;
   IBlackmagicRawClipProcessingAttributes* look;
@@ -219,6 +228,31 @@ static std::string joined(const std::vector<std::string>& v) {
 }
 
 static int fail(const char* what) { fprintf(stderr, "%s\n", what); return 1; }
+
+// the Mac's GPU (Alex, 2 Nov: "BRAW stutters, make it play like oil"): the codec is set to Metal, as Resolve does; the
+// CPU pipeline stays when there is no Metal device or ROARPLAY_BRAW_CPU is set. Returns the device (kept for the
+// codec's life) and fills the resource manager the pictures are read through.
+static IBlackmagicRawPipelineDevice* useMetal(IBlackmagicRawFactory* f, IBlackmagicRaw* codec, Callback& cb) {
+  if (getenv("ROARPLAY_BRAW_CPU")) return nullptr;
+  IBlackmagicRawPipelineDeviceIterator* it = nullptr;
+  if (f->CreatePipelineDeviceIterator(blackmagicRawPipelineMetal, blackmagicRawInteropNone, &it) != S_OK || !it) return nullptr;
+  IBlackmagicRawPipelineDevice* dev = nullptr;
+  HRESULT r = it->CreateDevice(&dev);
+  it->Release();
+  if (r != S_OK || !dev) return nullptr;
+  IBlackmagicRawConfiguration* cfg = nullptr;
+  IBlackmagicRawConfigurationEx* ex = nullptr;
+  BlackmagicRawPipeline pipe = blackmagicRawPipelineCPU;
+  bool ok = codec->QueryInterface(IID_IBlackmagicRawConfiguration, (LPVOID*)&cfg) == S_OK && cfg &&
+            codec->QueryInterface(IID_IBlackmagicRawConfigurationEx, (LPVOID*)&ex) == S_OK && ex &&
+            cfg->SetFromDevice(dev) == S_OK &&
+            dev->GetPipeline(&pipe, &cb.gpuContext, &cb.gpuQueue) == S_OK &&
+            ex->GetResourceManager(&cb.rm) == S_OK && cb.rm;
+  if (cfg) cfg->Release();
+  if (ex) ex->Release();
+  if (!ok) { fprintf(stderr, "braw: Metal could not be set, the CPU decodes\n"); cb.rm = nullptr; dev->Release(); return nullptr; }
+  return dev;
+}
 
 // the SDK's libraries sit beside this program (Resources/bin), or where ROARPLAY_BRAW_LIBS says
 static IBlackmagicRawFactory* factory() {
@@ -339,8 +373,18 @@ int main(int argc, char** argv) {
     Out out;
     const int sd = s >= 8 ? 8 : s >= 4 ? 4 : s >= 2 ? 2 : 1;
     scale = scaleFor(clip, w / sd, h / sd, scale); // a scale this camera offers; toRGBA makes it the size ffmpeg expects
+    Callback cb(&out, scale, w / sd, h / sd, nullptr); // the size media.js brawSource tells ffmpeg
+    // a second codec on the GPU, the clip opened again in it; if any of that fails, the CPU codec as before
+    IBlackmagicRaw* const cpuCodec = codec; IBlackmagicRawClip* const cpuClip = clip;
+    IBlackmagicRaw* gpu = nullptr; IBlackmagicRawClip* gclip = nullptr; IBlackmagicRawPipelineDevice* dev = nullptr;
+    if (f->CreateCodec(&gpu) == S_OK && gpu && (dev = useMetal(f, gpu, cb))) {
+      CFStringRef gp = toCF(argv[2]);
+      if (gpu->OpenClip(gp, &gclip) == S_OK && gclip) { codec = gpu; clip = gclip; fprintf(stderr, "braw: Metal\n"); }
+      else { cb.rm = nullptr; fprintf(stderr, "braw: Metal could not open the clip, the CPU decodes\n"); }
+      CFRelease(gp);
+    } else if (getenv("ROARPLAY_BRAW_SAY")) fprintf(stderr, "braw: CPU\n");
     IBlackmagicRawClipProcessingAttributes* look = lookFor(clip, argc > 5 ? argv[5] : "709");
-    Callback cb(&out, scale, w / sd, h / sd, look); // the size media.js brawSource tells ffmpeg
+    cb.look = look;
 
     codec->SetCallback(&cb);
     const int ahead = 6; // frames decoded at once on the SDK's threads
@@ -359,6 +403,18 @@ int main(int argc, char** argv) {
       std::vector<uint8_t> bytes = std::move(out.done[write]);
       out.done.erase(write);
       l.unlock();
+      if (bytes.empty() && codec != cpuCodec && write == first) {
+        // the GPU gave nothing for the first frame: the same again on the CPU, before anything was written
+        fprintf(stderr, "braw: Metal gave no picture, the CPU decodes\n");
+        codec->FlushJobs();
+        { std::lock_guard<std::mutex> g(out.m); out.done.clear(); out.failed = false; out.inFlight = 0; }
+        codec = cpuCodec; clip = cpuClip; cb.rm = nullptr; cb.gpuContext = cb.gpuQueue = nullptr;
+        if (look) look->Release();
+        look = lookFor(clip, argc > 5 ? argv[5] : "709"); cb.look = look;
+        codec->SetCallback(&cb);
+        next = first;
+        continue;
+      }
       if (bytes.empty()) { codec->FlushJobs(); return fail("A frame could not be decoded"); }
       if (fwrite(bytes.data(), 1, bytes.size(), stdout) != bytes.size()) break; // the reader let go: a seek, a close
       write++;

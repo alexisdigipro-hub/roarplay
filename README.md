@@ -24,8 +24,12 @@ RoarPlay offers to move itself to Applications; from there it updates itself.
   Info shows the clip's gamma, gamut, LUT and the sizes it decodes at.
 - **REDCODE RAW** (.R3D, on a Mac, since 0.5.0): decoded by RED's own SDK (9.2.1), the same way: the size the screen
   needs, timecode, sound, the camera's name.
-- **Camera RAW resolution** (since 0.5.1, Alex: "no reason to play it full"): a **Full / Half / Low** button in the bar, only
-  for BRAW and R3D clips, decodes at 1/1, 1/2 or 1/4 of the clip's size; Half to start with. A press goes on from the same frame.
+- **Camera RAW resolution** (since 0.5.1, Alex: "no reason to play it full"): a **Full / Half / Low / Proxy** button in the bar, only
+  for BRAW and R3D clips, decodes at 1/1, 1/2, 1/4 or 1/8 of the clip's size (Proxy since 0.5.2); Half to start with. A press goes on from the same frame.
+- **Smooth RAW** (0.5.2, Alex: "make it play like oil"): Blackmagic RAW is decoded on the Mac's GPU (Metal), as Resolve
+  does, with the CPU as before when Metal is not there; the picture is then made H.264 no larger than 4K (Full), 1440p
+  (Half) or 1080p (Low, Proxy), so the Mac's own encoder always takes it (it stops at 4096x2304: Half of a 12K or 17K clip
+  used to fall back to the slow software encoder).
 - **Not yet**: ARRIRAW, Canon RAW, Nikon N-RAW, and BRAW and R3D on Windows. RoarPlay says which tool opens each.
 
 What the computer decodes itself (H.264, HEVC, VP9, AV1; AAC, MP3, FLAC, Opus, WAV) plays as it is. Everything else is

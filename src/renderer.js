@@ -21,7 +21,7 @@ const fetchStore = (k, d) => { try { return JSON.parse(localStorage.getItem(k)) 
 
 // ---------- Words: English is the key, Greek the choice (as in the other Roar apps) ----------
 const EL = {
-  'Turn the picture 90°': 'Γύρνα την εικόνα 90°', 'Camera RAW: Full, Half or Low resolution while it plays': 'Camera RAW: πλήρης, μισή ή χαμηλή ανάλυση ενώ παίζει', 'Full': 'Full', 'Half': 'Half', 'Low': 'Low',
+  'Turn the picture 90°': 'Γύρνα την εικόνα 90°', 'Camera RAW: Full, Half, Low or Proxy resolution while it plays': 'Camera RAW: πλήρης, μισή, χαμηλή ή proxy ανάλυση ενώ παίζει', 'Full': 'Full', 'Half': 'Half', 'Low': 'Low', 'Proxy': 'Proxy',
   'Restart to update': 'Επανεκκίνηση για ενημέρωση', 'Open': 'Άνοιγμα', 'Queue and info': 'Λίστα και πληροφορίες', 'Settings': 'Ρυθμίσεις',
   'Open a web address (Cmd/Ctrl+U)': 'Άνοιγμα διεύθυνσης web (Cmd/Ctrl+U)', 'Open a web address': 'Άνοιγμα διεύθυνσης web',
   'A direct link to a video or sound file (http or https). Pages like YouTube are not links to files: RoarGrab saves those.': 'Ένας άμεσος σύνδεσμος σε αρχείο βίντεο ή ήχου (http ή https). Σελίδες όπως το YouTube δεν είναι σύνδεσμοι αρχείων: αυτές τις κατεβάζει το RoarGrab.',
@@ -1118,9 +1118,9 @@ for (const seg of $$('.seg')) {
 $('#speedChips').addEventListener('click', (e) => { const b = e.target.closest('button[data-v]'); if (b) setSpeed(+b.dataset.v); });
 $('#aspectChips').addEventListener('click', (e) => { const b = e.target.closest('button[data-v]'); if (b) { S.aspect = +b.dataset.v; save(); applyPicture(); fitWindow(true); setTimeout(applyPicture, 80); } });
 $('#zoomChips').addEventListener('click', (e) => { const b = e.target.closest('button[data-v]'); if (b) { S.zoom = +b.dataset.v; save(); applyPicture(); } });
-/* camera RAW (BRAW, R3D) plays at Full, Half or Low resolution (Alex, 1 Nov: "no reason to play it full"): the
+/* camera RAW (BRAW, R3D) plays at Full, Half, Low or Proxy resolution (Alex, 1 Nov: "no reason to play it full"): the
    SDK decodes at 1/1, 1/2 or 1/4; the button shows only for those clips, a press goes on from the same frame */
-const RAW_RES = [[1, 'Full'], [2, 'Half'], [4, 'Low']];
+const RAW_RES = [[1, 'Full'], [2, 'Half'], [4, 'Low'], [8, 'Proxy']]; // Proxy (2 Nov): an eighth, for 12K and 17K
 function rawMaxH(c) { return c.info?.braw && c.info.video?.height ? Math.max(1, Math.round(c.info.video.height / (+S.rawScale || 1))) : +S.playQuality; }
 function showRawRes() {
   const b = $('#rawRes'), raw = !!main.cur?.info?.braw;

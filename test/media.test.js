@@ -157,7 +157,14 @@ const ok = (what) => { n++; console.log(`  ✓ ${what}`); };
   assert.strictEqual(m.plan({ error: 'x', video: null, audio: [] }, '/x/A001.braw').why, 'raw');
   const sva = m.streamArgs('/x/A001.braw', bi, 'transcode', 2.5, { part: 'video' });
   assert.ok(!sva.includes('-ss') && sva.includes('pipe:0'));
-  ok('a BRAW clip: the reader\'s frame, scale and sample, ffmpeg reading its pipe');
+  // a 17K clip: whatever the reader decodes, VideoToolbox gets no more than 4K, 1440p or 1080p (it stops at 4096x2304)
+  const big = { braw: { width: 11680, height: 5360, fps: 24, frames: 48, audio: null }, video: { fps: 24 }, audio: [] };
+  const vf = (h) => { const a = m.streamArgs('/x/A001.braw', big, 'transcode', 0, { part: 'video', hw: true, platform: 'darwin', maxH: h }); return a[a.indexOf('-vf') + 1] + ' ' + a[a.indexOf('-b:v') + 1]; };
+  assert.ok(vf(5360).includes("min(iw,3840)':h='min(ih,2160)'") && vf(5360).endsWith('40M'), vf(5360));
+  assert.ok(vf(2680).includes("min(iw,2560)':h='min(ih,1440)'"), vf(2680));
+  assert.ok(vf(1340).includes("min(iw,1920)':h='min(ih,1080)'") && vf(1340).endsWith('16M'), vf(1340));
+  assert.ok(vf(670).includes("min(iw,1920)'") && m.brawSource('/x/A001.braw', big, 'video', 0, 670).input.join(' ').includes('-s 1460x670'));
+  ok('a BRAW clip: the reader\'s frame, scale and sample, ffmpeg reading its pipe, the picture boxed for the encoder');
   const ri = { braw: { reader: 'r3d', width: 6144, height: 3240, fps: 24, frames: 100, audio: { channels: 2, bits: 32, rate: 48000 } }, video: { fps: 24 }, audio: [{}] };
   const rv = m.brawSource('/x/A037.R3D', ri, 'video', 1, 1080);
   assert.deepStrictEqual(rv.cmd, ['video', '/x/A037.R3D', '24', '4']); assert.ok(rv.input.join(' ').includes('-pix_fmt bgra -s 1536x810'));

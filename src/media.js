@@ -97,6 +97,7 @@ function brawInfo(file, bin = BRAW) {
   });
 }
 // the scale the SDK decodes at (1, 2, 4, 8) for a picture no taller than maxH (0: the full size)
+const rawBox = (s) => (s <= 1 ? [3840, 2160] : s === 2 ? [2560, 1440] : [1920, 1080]);
 function brawScale(h, maxH) { let s = 1; if (maxH > 0) while (s < 8 && h / s > maxH * 1.05) s *= 2; return s; }
 // what the reader is run with, and what ffmpeg reads from it, for one part from `start` seconds
 function brawSource(file, info, part, start, maxH) {
@@ -327,11 +328,18 @@ function streamArgs(file, info, mode, start = 0, { track = 0, hw = false, part =
   // screen shows no more; 0 for the full size), no B-frames (the first frame is `start` exactly), a keyframe every second
   const v = info.video;
   const fps = v.fps > 0 && v.fps < 1000 ? v.fps : 25;
-  const scale = maxH > 0 ? `scale=-2:'min(ih,${maxH})':flags=fast_bilinear` : "scale='min(iw,3840)':-2:flags=bicubic";
+  // camera RAW (Alex, 2 Nov: "it stutters, make it play like oil"): whatever size the reader decodes at, the picture is
+  // made no larger than a box the Mac's H.264 encoder and the window's decoder take in real time (VideoToolbox stops at
+  // 4096x2304, so Half of a 12K or 17K clip fell back to x264): Full in 4K, Half in 1440p, Low and Proxy in 1080p
+  const box = info.braw ? rawBox(brawScale(info.braw.height, maxH)) : null;
+  const scale = box
+    ? `scale=w='min(iw,${box[0]})':h='min(ih,${box[1]})':force_original_aspect_ratio=decrease:force_divisible_by=2:flags=fast_bilinear`
+    : maxH > 0 ? `scale=-2:'min(ih,${maxH})':flags=fast_bilinear` : "scale='min(iw,3840)':-2:flags=bicubic";
+  const small = box ? box[1] <= 1080 : maxH && maxH <= 1080;
   // the reader already decoded at the right size; only an even width and height are made
   const filters = [v.interlaced ? 'yadif=0:-1:0' : null, scale, hw ? 'format=nv12' : 'format=yuv420p'].filter(Boolean);
   const enc = hw && platform === 'darwin'
-    ? ['-c:v', 'h264_videotoolbox', '-b:v', maxH && maxH <= 1080 ? '16M' : '40M', '-realtime', '1', '-allow_sw', '1', '-profile:v', 'high']
+    ? ['-c:v', 'h264_videotoolbox', '-b:v', small ? '16M' : '40M', '-realtime', '1', '-allow_sw', '1', '-profile:v', 'high']
     : ['-c:v', 'libx264', '-preset', 'ultrafast', '-tune', 'zerolatency', '-crf', '18', '-profile:v', 'high', '-threads', '0'];
   // a keyframe every half second: the first piece reaches the window sooner, and a seek lands closer
   return [...head, '-map', '0:v:0', '-an', '-vf', filters.join(','), ...enc, '-bf', '0', '-g', String(Math.max(1, Math.round(fps / 2))), '-fps_mode', 'passthrough', ...tail];

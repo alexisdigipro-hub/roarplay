@@ -1,4 +1,4 @@
-# RoarPlay · where we stopped (1 Nov 2026)
+# RoarPlay · where we stopped (2 Nov 2026)
 
 Start a new session by reading this, CLAUDE.md and README.md. Talk to Alex in Greek, friendly and concrete, no em dashes.
 
@@ -12,6 +12,12 @@ Start a new session by reading this, CLAUDE.md and README.md. Talk to Alex in Gr
 - 0.5.0 RED R3D on the Mac: SDK 9.2.1 (draft release sdk-r3d), helper/r3d.cpp, scripts/r3d-build.sh. Proved on
   Alex's clip A037_C062_02253S_001.R3D (KOMODO 6K, 6144x3240; draft release sdk-r3d-clip), also inside the packed app.
 
+- 0.5.2 (Alex, 2 Nov: "BRAW stutters a bit, make it play like oil"): braw.cpp decodes on Metal (useMetal: a second
+  codec set from a Metal pipeline device, pictures read through the resource manager's host pointer; CPU when Metal
+  is missing, ROARPLAY_BRAW_CPU is set, or the first frame comes back empty); toRGBA hands RGBA at the asked size on
+  as it is; media.js rawBox: a RAW picture is encoded in no more than 3840x2160 / 2560x1440 / 1920x1080 (Full / Half /
+  Low and Proxy); a fourth level Proxy (1/8). braw-check.yml prints SPEED lines (CPU vs Metal, the whole way).
+
 ## Alex still has to
 - Update to 0.5.0 (Restart to update) and check: the BRAW clips (A001, the A038 ones from PYXIS 12K) without stripes,
   and the R3D clip with picture and sound. He wants to check himself before the Lab page says BRAW and RED play.
@@ -19,6 +25,8 @@ Start a new session by reading this, CLAUDE.md and README.md. Talk to Alex in Gr
 ## Next
 - When Alex confirms: update the Lab page (themadlions-projects public/site/lab/roarplay/, then themadlions-site) to
   say Blackmagic RAW and RED play on a Mac.
+- Next for smooth RAW: RED on the GPU (the R3D SDK's REDMetal), and a seek that keeps the reader open instead of
+  starting it again.
 - Offered, not asked yet: Rec.709 for R3D (RED's ImageProcessingSettings), as BRAW has.
 - Not yet: BRAW and R3D on Windows (needs Blackmagic's Windows SDK; the R3D SDK already has win64), ARRIRAW, Canon RAW.
 - Leftover draft releases sdk-inbox, sdk-inbox2 can be deleted.
