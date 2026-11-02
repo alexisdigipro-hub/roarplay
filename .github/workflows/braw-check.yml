@@ -85,3 +85,14 @@ jobs:
             echo "SPEED scale 1/$S whole way (GPU reader + ffmpeg H.264 in $BOX): $N frames in $((T1-T0)) ms"
             [ $S = 8 ] && { $FF -hide_banner -loglevel error -y -i /tmp/sp.mp4 -frames:v 1 -vf scale=480:-2 -q:v 5 /tmp/sp.jpg && echo "==LOOK speed-gpu==" && base64 -i /tmp/sp.jpg | tr -d '\n' && echo && echo "==END=="; } || true
           done
+      # the GPU's picture is the CPU's picture: frame 0 at a quarter from each, compared by ffmpeg (PSNR over 40 dB = alike)
+      - name: Metal and CPU give the same picture
+        run: |
+          C=$(ls /tmp/clip/*.braw 2>/dev/null | head -1); [ -n "$C" ] || { echo "no clip"; exit 0; }
+          R=build/helper/roarplay-braw; FF=vendor/ffmpeg/darwin-arm64/ffmpeg
+          INFO=$($R info "$C")
+          WH=$(node -e "const i=JSON.parse(process.argv[1]); console.log(Math.floor(i.width/4)+'x'+Math.floor(i.height/4))" "$INFO")
+          B=$(node -e "const [w,h]=process.argv[1].split('x'); console.log(w*h*4)" "$WH")
+          ROARPLAY_BRAW_CPU=1 $R video "$C" 0 4 709 2>/dev/null | head -c "$B" > /tmp/cpu.rgba
+          $R video "$C" 0 4 709 2>/tmp/gpu-err | head -c "$B" > /tmp/gpu.rgba; cat /tmp/gpu-err
+          $FF -hide_banner -f rawvideo -pix_fmt rgba -s "$WH" -i /tmp/gpu.rgba -f rawvideo -pix_fmt rgba -s "$WH" -i /tmp/cpu.rgba -lavfi psnr -f null - 2>&1 | grep -i psnr | tail -1

@@ -91,6 +91,7 @@ const sessions = new Map(); // id -> { file, info, mode, start, track, part }
 const running = new Map();  // session id -> ffmpeg process now playing
 let lastId = 0;
 let noMetal = false; // set when the BRAW reader fell back from the GPU to the CPU
+let brawCpu = false; // the person chose the CPU (Settings)
 
 function stopAll(ids = null) {
   for (const [id, p] of running) { if (ids && !ids.includes(id)) continue; try { p.kill('SIGKILL'); p.reader?.kill('SIGKILL'); } catch {} running.delete(id); }
@@ -111,7 +112,7 @@ function playStream(s) {
     if (s.info.braw) {
       const src = media.brawSource(s.file, s.info, s.part, s.start, s.maxH);
       // a Mac whose GPU could not hand the picture back once is not asked again (each try costs a seek its start)
-      const r = spawn(media.readerPath(s.info), src.cmd, { windowsHide: true, env: noMetal ? { ...process.env, ROARPLAY_BRAW_CPU: '1' } : process.env });
+      const r = spawn(media.readerPath(s.info), src.cmd, { windowsHide: true, env: noMetal || brawCpu ? { ...process.env, ROARPLAY_BRAW_CPU: '1' } : process.env });
       r.stdout.pipe(p.stdin);
       r.stdout.on('error', () => {}); p.stdin.on('error', () => {});
       r.stderr.on('data', (d) => { if (/Metal gave no picture|Metal could not/.test(d)) noMetal = true; err = (err + d).slice(-2000); });
@@ -280,6 +281,8 @@ function readList(p) {
 }
 ipcMain.handle('pick-folder', async () => { const r = await dialog.showOpenDialog(win, { properties: ['openDirectory', 'createDirectory'] }); return r.canceled ? null : r.filePaths[0]; });
 ipcMain.handle('braw-look', (_e, l) => media.setBrawLook(l));
+// Settings > Playing: the GPU (Metal, the start) or the CPU decodes BRAW; a GPU that failed once stays off (noMetal)
+ipcMain.handle('braw-decode', (_e, d) => { brawCpu = d === 'cpu'; });
 ipcMain.handle('on-top', (_e, on) => { if (win) win.setAlwaysOnTop(!!on, 'floating'); });
 
 // Open with RoarPlay (Alex, 31 Oct): on a Mac the helper tells the system; on Windows the system's own page opens,
