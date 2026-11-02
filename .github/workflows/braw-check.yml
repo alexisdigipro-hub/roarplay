@@ -57,3 +57,42 @@ jobs:
               echo "==LOOK $S $L=="; base64 -i /tmp/look-$S-$L.jpg | tr -d '\n'; echo; echo "==END=="
             done
           done
+      # how fast (Alex, 2 Nov: "it stutters, make it play like oil"): 48 frames of Alex's clip at Half, Low and Proxy,
+      # on the CPU and on the Mac's GPU (Metal), then the whole way through ffmpeg into H.264 as the player makes it
+      - name: Speed on Alex's clip
+        run: |
+          C=$(ls /tmp/clip/*.braw 2>/dev/null | head -1); [ -n "$C" ] || { echo "no clip"; exit 0; }
+          R=build/helper/roarplay-braw; FF=vendor/ffmpeg/darwin-arm64/ffmpeg
+          INFO=$($R info "$C")
+          N=$(node -e "console.log(Math.min(48, JSON.parse(process.argv[1]).frames))" "$INFO")
+          for S in 2 4 8; do
+            WH=$(node -e "const i=JSON.parse(process.argv[1]),s=+process.argv[2]; console.log(Math.floor(i.width/s)+'x'+Math.floor(i.height/s))" "$INFO" "$S")
+            B=$(node -e "const [w,h]=process.argv[1].split('x'); console.log(w*h*4*+process.argv[2])" "$WH" "$N")
+            for MODE in cpu gpu; do
+              if [ $MODE = cpu ]; then export ROARPLAY_BRAW_CPU=1; else unset ROARPLAY_BRAW_CPU; fi
+              T0=$(node -e "console.log(Date.now())")
+              $R video "$C" 0 "$S" 709 2>/tmp/sp-err | head -c "$B" | wc -c > /tmp/sp-n
+              T1=$(node -e "console.log(Date.now())")
+              echo "SPEED scale 1/$S ($WH) $MODE: $N frames in $((T1-T0)) ms = $(node -e "console.log((+process.argv[1]*1000/Math.max(1,+process.argv[2])).toFixed(1))" "$N" "$((T1-T0))") fps; bytes $(cat /tmp/sp-n); reader: $(tr '\n' ' ' < /tmp/sp-err)"
+            done
+            unset ROARPLAY_BRAW_CPU
+            BOX=$([ $S = 2 ] && echo 2560:1440 || echo 1920:1080)
+            T0=$(node -e "console.log(Date.now())")
+            $R video "$C" 0 "$S" 709 2>/dev/null | head -c "$B" | $FF -hide_banner -loglevel error -f rawvideo -pix_fmt rgba -s "$WH" -r 24 -i pipe:0 \
+              -vf "scale=w='min(iw,${BOX%:*})':h='min(ih,${BOX#*:})':force_original_aspect_ratio=decrease:force_divisible_by=2:flags=fast_bilinear,format=nv12" \
+              -c:v h264_videotoolbox -b:v 16M -realtime 1 -allow_sw 1 -bf 0 -f mp4 -movflags frag_keyframe+empty_moov -y /tmp/sp.mp4 || true
+            T1=$(node -e "console.log(Date.now())")
+            echo "SPEED scale 1/$S whole way (GPU reader + ffmpeg H.264 in $BOX): $N frames in $((T1-T0)) ms"
+            [ $S = 8 ] && { $FF -hide_banner -loglevel error -y -i /tmp/sp.mp4 -frames:v 1 -vf scale=480:-2 -q:v 5 /tmp/sp.jpg && echo "==LOOK speed-gpu==" && base64 -i /tmp/sp.jpg | tr -d '\n' && echo && echo "==END=="; } || true
+          done
+      # the GPU's picture is the CPU's picture: frame 0 at a quarter from each, compared by ffmpeg (PSNR over 40 dB = alike)
+      - name: Metal and CPU give the same picture
+        run: |
+          C=$(ls /tmp/clip/*.braw 2>/dev/null | head -1); [ -n "$C" ] || { echo "no clip"; exit 0; }
+          R=build/helper/roarplay-braw; FF=vendor/ffmpeg/darwin-arm64/ffmpeg
+          INFO=$($R info "$C")
+          WH=$(node -e "const i=JSON.parse(process.argv[1]); console.log(Math.floor(i.width/4)+'x'+Math.floor(i.height/4))" "$INFO")
+          B=$(node -e "const [w,h]=process.argv[1].split('x'); console.log(w*h*4)" "$WH")
+          ROARPLAY_BRAW_CPU=1 $R video "$C" 0 4 709 2>/dev/null | head -c "$B" > /tmp/cpu.rgba
+          $R video "$C" 0 4 709 2>/tmp/gpu-err | head -c "$B" > /tmp/gpu.rgba; cat /tmp/gpu-err
+          $FF -hide_banner -f rawvideo -pix_fmt rgba -s "$WH" -i /tmp/gpu.rgba -f rawvideo -pix_fmt rgba -s "$WH" -i /tmp/cpu.rgba -lavfi psnr -f null - 2>&1 | grep -i psnr | tail -1

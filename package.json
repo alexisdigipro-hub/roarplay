@@ -1,6 +1,6 @@
 {
   "name": "roarplay",
-  "version": "0.5.1",
+  "version": "0.5.2",
   "description": "RoarPlay: plays every video and every sound file, on your own computer. The Mad Lions Lab.",
   "main": "src/main.js",
   "scripts": {

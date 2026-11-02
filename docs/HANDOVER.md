@@ -1,4 +1,4 @@
-# RoarPlay · where we stopped (1 Nov 2026)
+# RoarPlay · where we stopped (2 Nov 2026)
 
 Start a new session by reading this, CLAUDE.md and README.md. Talk to Alex in Greek, friendly and concrete, no em dashes.
 
@@ -12,13 +12,27 @@ Start a new session by reading this, CLAUDE.md and README.md. Talk to Alex in Gr
 - 0.5.0 RED R3D on the Mac: SDK 9.2.1 (draft release sdk-r3d), helper/r3d.cpp, scripts/r3d-build.sh. Proved on
   Alex's clip A037_C062_02253S_001.R3D (KOMODO 6K, 6144x3240; draft release sdk-r3d-clip), also inside the packed app.
 
+- 0.5.2 (Alex, 2 Nov: "BRAW stutters a bit, make it play like oil"). Measured in CI on his URSA Cine 17K clip
+  (braw-check.yml SPEED lines): CPU decode 8 fps at Half, 26 fps at Low; the 17K camera offers no 1/8 (asked 1/8, got
+  1/4). So: the RAW button is Auto / Full / Half / Low (S.rawRes, Auto = the largest scale keeping the picture <= 1700
+  tall); media.js rawBox encodes a RAW picture into <= 3840x2160 / 2560x1440 / 1920x1080; braw.cpp decodes on Metal
+  (useMetal; picture read by host pointer, else copied into a CPU resource), back to the CPU when the first frame
+  comes back empty, and main.js then sets ROARPLAY_BRAW_CPU for the rest of the session; toRGBA passes RGBA at the
+  asked size on as it is. Settings > Playing > Blackmagic RAW is decoded by Graphics / Processor (S.brawDecode, main.js
+  brawCpu). On the CI's virtual GPU Metal was faster at Half (7.6 vs 5.6 fps) and slower at Low (10 vs 19-26): the real
+  Mac decides; Alex is to try both on his clips and say which plays smoother. Metal's picture = CPU's (PSNR 48.7 dB).
+
 ## Alex still has to
+- Update to 0.5.2 and play the 17K and PYXIS clips with the RAW button on Auto; if they still stutter, Settings >
+  Playing > Blackmagic RAW is decoded by: try Processor, and say which is smoother (that becomes the start).
 - Update to 0.5.0 (Restart to update) and check: the BRAW clips (A001, the A038 ones from PYXIS 12K) without stripes,
   and the R3D clip with picture and sound. He wants to check himself before the Lab page says BRAW and RED play.
 
 ## Next
 - When Alex confirms: update the Lab page (themadlions-projects public/site/lab/roarplay/, then themadlions-site) to
   say Blackmagic RAW and RED play on a Mac.
+- Next for smooth RAW: RED on the GPU (the R3D SDK's REDMetal), and a seek that keeps the reader open instead of
+  starting it again.
 - Offered, not asked yet: Rec.709 for R3D (RED's ImageProcessingSettings), as BRAW has.
 - Not yet: BRAW and R3D on Windows (needs Blackmagic's Windows SDK; the R3D SDK already has win64), ARRIRAW, Canon RAW.
 - Leftover draft releases sdk-inbox, sdk-inbox2 can be deleted.

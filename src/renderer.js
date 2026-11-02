@@ -8,7 +8,7 @@ const DEFAULTS = {
   lang: 'en', autoUpdate: true, atEnd: 'next', clockMode: 'tc', volume: 1, muted: false, side: true, sideTab: 'queue',
   speed: 1, keepPitch: true, subSize: 'm', subDelay: 0, subOn: true,
   fitMode: 'contain', aspect: 0, zoom: 1, rot: 0, flipH: false, flipV: false, brightness: 1, contrast: 1, saturation: 1, followPic: true, onTop: false,
-  playQuality: 1080, rawScale: 2, brawLook: '709', seqFps: 24, resume: true, snapFormat: 'png', snapWhere: 'beside', snapDir: '',
+  playQuality: 1080, rawRes: 'auto', brawLook: '709', brawDecode: 'gpu', seqFps: 24, resume: true, snapFormat: 'png', snapWhere: 'beside', snapDir: '',
   chan: 'stereo', audDelay: 0, outDevice: '', eq: [0, 0, 0, 0, 0, 0, 0, 0, 0, 0], shuffle: false,
   scopeKind: 'waveform', keyTicks: false, lutFile: '', lutMix: 1, cmpMode: 'wipe', quiet: true,
   keepQueue: true, autoplayOpen: true, jumpSecs: 1, keepLook: true, startVolume: 'keep', keepSound: true, subAuto: true, subLang: '', idleSecs: 2, sideStart: true, bezelTop: false, snapName: 'tc',
@@ -21,7 +21,7 @@ const fetchStore = (k, d) => { try { return JSON.parse(localStorage.getItem(k)) 
 
 // ---------- Words: English is the key, Greek the choice (as in the other Roar apps) ----------
 const EL = {
-  'Turn the picture 90°': 'Γύρνα την εικόνα 90°', 'Camera RAW: Full, Half or Low resolution while it plays': 'Camera RAW: πλήρης, μισή ή χαμηλή ανάλυση ενώ παίζει', 'Full': 'Full', 'Half': 'Half', 'Low': 'Low',
+  'Turn the picture 90°': 'Γύρνα την εικόνα 90°', 'Camera RAW: Auto, Full, Half or Low resolution while it plays': 'Camera RAW: αυτόματη, πλήρης, μισή ή χαμηλή ανάλυση ενώ παίζει', 'Auto': 'Auto', 'Blackmagic RAW is decoded by': 'Το Blackmagic RAW αποκωδικοποιείται από', 'The graphics chip (Metal), as DaVinci Resolve does, or the processor. If a clip stutters, try the other.': 'Την κάρτα γραφικών (Metal), όπως το DaVinci Resolve, ή τον επεξεργαστή. Αν ένα κλιπ κολλάει, δοκίμασε το άλλο.', 'Graphics': 'Κάρτα γραφικών', 'Processor': 'Επεξεργαστής', 'Full': 'Full', 'Half': 'Half', 'Low': 'Low',
   'Restart to update': 'Επανεκκίνηση για ενημέρωση', 'Open': 'Άνοιγμα', 'Queue and info': 'Λίστα και πληροφορίες', 'Settings': 'Ρυθμίσεις',
   'Open a web address (Cmd/Ctrl+U)': 'Άνοιγμα διεύθυνσης web (Cmd/Ctrl+U)', 'Open a web address': 'Άνοιγμα διεύθυνσης web',
   'A direct link to a video or sound file (http or https). Pages like YouTube are not links to files: RoarGrab saves those.': 'Ένας άμεσος σύνδεσμος σε αρχείο βίντεο ή ήχου (http ή https). Σελίδες όπως το YouTube δεν είναι σύνδεσμοι αρχείων: αυτές τις κατεβάζει το RoarGrab.',
@@ -1079,7 +1079,7 @@ function toast(html) {
 }
 // the segmented choices: which one is on comes from S (or the side tab)
 const MIRROR = { fitMode2: 'fitMode', subSize2: 'subSize' };
-const SEG_VAL = { sideTab: () => S.sideTab, fitMode: () => S.fitMode, fitMode2: () => S.fitMode, subSize2: () => S.subSize, playQuality: () => String(S.playQuality), brawLook: () => S.brawLook, seqFps: () => String(S.seqFps), jumpSecs: () => String(S.jumpSecs), idleSecs: () => String(S.idleSecs), scopeKind: () => S.scopeKind, cmpMode: () => S.cmpMode };
+const SEG_VAL = { sideTab: () => S.sideTab, fitMode: () => S.fitMode, fitMode2: () => S.fitMode, subSize2: () => S.subSize, playQuality: () => String(S.playQuality), brawLook: () => S.brawLook, brawDecode: () => S.brawDecode, seqFps: () => String(S.seqFps), jumpSecs: () => String(S.jumpSecs), idleSecs: () => String(S.idleSecs), scopeKind: () => S.scopeKind, cmpMode: () => S.cmpMode };
 function placeLenses() {
   for (const seg of $$('.seg')) {
     const id = seg.id;
@@ -1105,6 +1105,7 @@ for (const seg of $$('.seg')) {
     else if (seg.id === 'subSize2') { S.subSize = val; applySubSize(); }
     else if (seg.id === 'jumpSecs' || seg.id === 'idleSecs') { S[seg.id] = +val; }
     else if (seg.id === 'playQuality') { S.playQuality = +val; if (cur?.mode === 'transcode') { const at = pos(), p = !v.paused; startAt(main, at, p); } }
+    else if (seg.id === 'brawDecode') { S.brawDecode = val; window.api.brawDecode(val); if (cur?.info?.braw) { const at = pos(), p = !v.paused; startAt(main, at, p); } }
     else if (seg.id === 'brawLook') { S.brawLook = val; window.api.brawLook(val); if (cur?.info?.braw) { const at = pos(), p = !v.paused; startAt(main, at, p); } }
     else if (seg.id === 'scopeKind') { S.scopeKind = val; drawScopeNow(); }
     else if (seg.id === 'cmpMode') { S.cmpMode = val; applyCompare(); }
@@ -1118,18 +1119,24 @@ for (const seg of $$('.seg')) {
 $('#speedChips').addEventListener('click', (e) => { const b = e.target.closest('button[data-v]'); if (b) setSpeed(+b.dataset.v); });
 $('#aspectChips').addEventListener('click', (e) => { const b = e.target.closest('button[data-v]'); if (b) { S.aspect = +b.dataset.v; save(); applyPicture(); fitWindow(true); setTimeout(applyPicture, 80); } });
 $('#zoomChips').addEventListener('click', (e) => { const b = e.target.closest('button[data-v]'); if (b) { S.zoom = +b.dataset.v; save(); applyPicture(); } });
-/* camera RAW (BRAW, R3D) plays at Full, Half or Low resolution (Alex, 1 Nov: "no reason to play it full"): the
+/* camera RAW (BRAW, R3D) plays at Auto, Full, Half or Low resolution (Alex, 1 Nov: "no reason to play it full"): the
    SDK decodes at 1/1, 1/2 or 1/4; the button shows only for those clips, a press goes on from the same frame */
-const RAW_RES = [[1, 'Full'], [2, 'Half'], [4, 'Low']];
-function rawMaxH(c) { return c.info?.braw && c.info.video?.height ? Math.max(1, Math.round(c.info.video.height / (+S.rawScale || 1))) : +S.playQuality; }
+// Auto (Alex, 2 Nov: "it stutters, make it play like oil"; on his 17K clip Half decoded at 8 fps, Low at 26): the
+// largest of 1/1, 1/2, 1/4 that keeps the decoded picture no taller than 1700 (6K at Half, 12K and 17K at Low)
+const RAW_RES = [['auto', 'Auto'], [1, 'Full'], [2, 'Half'], [4, 'Low']];
+function rawScaleOf(c) {
+  if (S.rawRes !== 'auto') return +S.rawRes || 1;
+  let s = 1; const h = c.info.video.height; while (s < 4 && h / s > 1700) s *= 2; return s;
+}
+function rawMaxH(c) { return c.info?.braw && c.info.video?.height ? Math.max(1, Math.round(c.info.video.height / rawScaleOf(c))) : +S.playQuality; }
 function showRawRes() {
   const b = $('#rawRes'), raw = !!main.cur?.info?.braw;
   b.hidden = !raw;
-  if (raw) { const [s, l] = RAW_RES.find((x) => x[0] === +S.rawScale) || RAW_RES[1]; b.textContent = t(l); b.classList.toggle('lit', s !== 1); }
+  if (raw) { const [v, l] = RAW_RES.find((x) => String(x[0]) === String(S.rawRes)) || RAW_RES[0]; b.textContent = t(l); b.classList.toggle('lit', v !== 1); }
 }
 $('#rawRes').addEventListener('click', () => {
-  const i = RAW_RES.findIndex((x) => x[0] === +S.rawScale);
-  S.rawScale = RAW_RES[(i + 1) % RAW_RES.length][0]; save(); showRawRes();
+  const i = RAW_RES.findIndex((x) => String(x[0]) === String(S.rawRes));
+  S.rawRes = RAW_RES[(i + 1) % RAW_RES.length][0]; save(); showRawRes();
   if (main.cur?.info?.braw) { const at = pos(), p = !v.paused; startAt(main, at, p); }
 });
 // a quarter turn at a press, beside the Picture button (Alex, 1 Nov: "I miss a button to turn the picture")
@@ -1824,7 +1831,7 @@ applyAudio();
 showSide();
 showSideTab();
 applyLang();
-window.api.brawLook(S.brawLook);
+window.api.brawLook(S.brawLook); window.api.brawDecode(S.brawDecode);
 drawFacts();
 // the queue from last time, not playing by itself
 queue = S.keepQueue ? fetchStore('queue', []).filter((q) => q && q.file) : [];
