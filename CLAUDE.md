@@ -57,6 +57,11 @@ goes through `t()` or a data-i18n attribute and gets its Greek.
 - Camera clips to prove on: Alex sends them with RoarTransfer, sdk.yml (name braw-clip / r3d-clip) keeps them in
   draft releases (over 2 GB in parts); braw-check.yml and r3d-check.yml decode them at every scale and print a small
   picture as base64 between ==LOOK== markers, to be looked at before a release. Never ship a camera fix unseen.
+- 0.6.0 (Alex, 3 Nov): RoarPlay opens as it was left: the page's state is the `S` settings in localStorage (side false by
+  default, sideTab, loop, moreOpen, volume, speed…; save() keeps the side from before the small bezel), the window's place,
+  size, maximized and full screen are main.js window.json. Settings are RoarMail's sheet (index.html #settings: .set-side
+  with .set-item pages and the sliding .list-lens, .set-head big title, .set-sec / .set-sub / .set-group cards of
+  .set-row and .check rows; styles.css "Settings as RoarMail's"; renderer.js drawSetHead). New settings go in a card there.
 - Releases: bump `version` in package.json, tag `vX.Y.Z`, push the tag (.github/workflows/desktop.yml); the release's
   files are the download links (themadlions.com/lab/roarplay/) and what src/updater.js looks at.
 - Work on a branch, open a PR, wait for the green check (.github/workflows/check.yml), merge it yourself.

@@ -5,22 +5,29 @@ const $$ = (s) => [...document.querySelectorAll(s)];
 
 // ---------- Settings, kept on this computer ----------
 const DEFAULTS = {
-  lang: 'en', autoUpdate: true, atEnd: 'next', clockMode: 'tc', volume: 1, muted: false, side: true, sideTab: 'queue',
+  lang: 'en', autoUpdate: true, atEnd: 'next', clockMode: 'tc', volume: 1, muted: false, side: false, sideTab: 'queue', loop: false, moreOpen: false,
   speed: 1, keepPitch: true, subSize: 'm', subDelay: 0, subOn: true,
   fitMode: 'contain', aspect: 0, zoom: 1, rot: 0, flipH: false, flipV: false, brightness: 1, contrast: 1, saturation: 1, followPic: true, onTop: false,
   playQuality: 1080, rawRes: 'auto', brawLook: '709', brawDecode: 'gpu', seqFps: 24, resume: true, snapFormat: 'png', snapWhere: 'beside', snapDir: '',
   chan: 'stereo', audDelay: 0, outDevice: '', eq: [0, 0, 0, 0, 0, 0, 0, 0, 0, 0], shuffle: false,
   scopeKind: 'waveform', keyTicks: false, lutFile: '', lutMix: 1, cmpMode: 'wipe', quiet: true,
-  keepQueue: true, autoplayOpen: true, jumpSecs: 1, keepLook: true, startVolume: 'keep', keepSound: true, subAuto: true, subLang: '', idleSecs: 2, sideStart: true, bezelTop: false, snapName: 'tc',
+  keepQueue: true, autoplayOpen: true, jumpSecs: 1, keepLook: true, startVolume: 'keep', keepSound: true, subAuto: true, subLang: '', idleSecs: 2, bezelTop: false, snapName: 'tc',
 };
+// RoarPlay opens the way it was left (Alex, 3 Nov): the side open or closed and its tab, the sound, the speed, the
+// loop, the tools behind the ⋯, the picture and the sound popovers; a fresh install opens with the side closed.
+// The small bezel closes the side only for as long as it lasts, so what is kept is the side from before it.
+let compactBefore = null;
 let S = { ...DEFAULTS };
 try { S = { ...DEFAULTS, ...JSON.parse(localStorage.getItem('settings') || '{}') }; } catch {}
-const save = () => { try { localStorage.setItem('settings', JSON.stringify(S)); } catch {} };
+delete S.sideStart;
+const save = () => { try { localStorage.setItem('settings', JSON.stringify(compactBefore ? { ...S, side: compactBefore.side } : S)); } catch {} };
 const store = (k, v) => { try { localStorage.setItem(k, JSON.stringify(v)); } catch {} };
 const fetchStore = (k, d) => { try { return JSON.parse(localStorage.getItem(k)) ?? d; } catch { return d; } };
 
 // ---------- Words: English is the key, Greek the choice (as in the other Roar apps) ----------
 const EL = {
+  'The app': 'Η εφαρμογή', 'The window': 'Το παράθυρο', 'While it plays': 'Όσο παίζει', 'The small bezel': 'Το μικρό bezel', 'Camera RAW': 'Camera RAW',
+  'RoarPlay opens as you left it: the window, the side and its tab, the sound, the speed.': 'Το RoarPlay ανοίγει όπως το άφησες: το παράθυρο, η πλευρά και η καρτέλα της, ο ήχος, η ταχύτητα.',
   'Turn the picture 90°': 'Γύρνα την εικόνα 90°', 'Camera RAW: Auto, Full, Half or Low resolution while it plays': 'Camera RAW: αυτόματη, πλήρης, μισή ή χαμηλή ανάλυση ενώ παίζει', 'Auto': 'Auto', 'Blackmagic RAW is decoded by': 'Το Blackmagic RAW αποκωδικοποιείται από', 'The graphics chip (Metal), as DaVinci Resolve does, or the processor. If a clip stutters, try the other.': 'Την κάρτα γραφικών (Metal), όπως το DaVinci Resolve, ή τον επεξεργαστή. Αν ένα κλιπ κολλάει, δοκίμασε το άλλο.', 'Graphics': 'Κάρτα γραφικών', 'Processor': 'Επεξεργαστής', 'Full': 'Full', 'Half': 'Half', 'Low': 'Low',
   'Restart to update': 'Επανεκκίνηση για ενημέρωση', 'Open': 'Άνοιγμα', 'Queue and info': 'Λίστα και πληροφορίες', 'Settings': 'Ρυθμίσεις',
   'Open a web address (Cmd/Ctrl+U)': 'Άνοιγμα διεύθυνσης web (Cmd/Ctrl+U)', 'Open a web address': 'Άνοιγμα διεύθυνσης web',
@@ -601,7 +608,7 @@ function drawRange() {
   $('#inMark').style.left = `${a * 100}%`;
   $('#outMark').style.left = `${b * 100}%`;
 }
-function setLoop(on) { looping = on; $('#loop').classList.toggle('on', on); }
+function setLoop(on) { looping = on; $('#loop').classList.toggle('on', on); if (S.loop !== on) { S.loop = on; save(); } }
 function playRange() { if (!cur) return; shuttle = 1; showShuttle(); stopReverse(); v.playbackRate = S.speed; seek(inPt ?? 0, { play: true }); }
 
 // ---------- Chapters ----------
@@ -974,8 +981,7 @@ document.addEventListener('mousemove', () => {
     if (document.body.classList.contains('compact')) { document.body.classList.remove('show-bar'); if (!v.paused) document.body.classList.add('idle'); }
   }, S.idleSecs * 1000 + 200);
 });
-// the small bezel: only the picture inside a thin frame, the controls when the mouse comes
-let compactBefore = null;
+// the small bezel: only the picture inside a thin frame, the controls when the mouse comes (compactBefore is at the top)
 function setCompact(on) {
   const was = document.body.classList.contains('compact');
   if (on === was) return;
@@ -1081,6 +1087,7 @@ function toast(html) {
 const MIRROR = { fitMode2: 'fitMode', subSize2: 'subSize' };
 const SEG_VAL = { sideTab: () => S.sideTab, fitMode: () => S.fitMode, fitMode2: () => S.fitMode, subSize2: () => S.subSize, playQuality: () => String(S.playQuality), brawLook: () => S.brawLook, brawDecode: () => S.brawDecode, seqFps: () => String(S.seqFps), jumpSecs: () => String(S.jumpSecs), idleSecs: () => String(S.idleSecs), scopeKind: () => S.scopeKind, cmpMode: () => S.cmpMode };
 function placeLenses() {
+  drawSetHead();
   for (const seg of $$('.seg')) {
     const id = seg.id;
     const val = SEG_VAL[id] ? SEG_VAL[id]() : String(S[id]);
@@ -1325,7 +1332,8 @@ $('#defaultApply').addEventListener('click', async () => {
 drawGroups();
 
 // the tools behind the ⋯ button; the controls fade while it plays and the mouse rests
-$('#moreBtn').addEventListener('click', (e) => { e.stopPropagation(); setBody('more-open', !document.body.classList.contains('more-open')); placeLenses(); });
+$('#moreBtn').addEventListener('click', (e) => { e.stopPropagation(); S.moreOpen = !document.body.classList.contains('more-open'); save(); setBody('more-open', S.moreOpen); placeLenses(); });
+setBody('more-open', S.moreOpen);
 $('#quiet').checked = S.quiet; setBody('quiet', S.quiet);
 $('#quiet').addEventListener('input', (e) => { S.quiet = e.target.checked; save(); setBody('quiet', S.quiet); });
 
@@ -1373,11 +1381,23 @@ $('#updRestart').addEventListener('click', () => window.api.update.install());
 $('#updCheck').addEventListener('click', () => { showUpdate({ ...upd, status: 'checking' }); window.api.update.check().then(showUpdate); });
 const setOpen = (on) => { $('#settings').hidden = !on; if (on) { showUpdate(); placeLenses(); drawDevices(); if (platform === 'darwin') checkDefaults(); $('#closeSettings').focus(); } };
 function showPage(name) {
-  for (const b of $$('.set-nav button[data-page]')) b.classList.toggle('on', b.dataset.page === name);
+  for (const b of $$('.set-item[data-page]')) b.classList.toggle('on', b.dataset.page === name);
   for (const p of $$('.set-page')) p.hidden = p.dataset.page !== name;
+  $('.set-pages').scrollTop = 0;
   placeLenses();
 }
-$('.set-nav').addEventListener('click', (e) => { const b = e.target.closest('button[data-page]'); if (b) showPage(b.dataset.page); });
+// the page's big title, the values beside some pages in the list, and the lens on the chosen page (as RoarMail's)
+function drawSetHead() {
+  const on = $('.set-item.on');
+  if (!on) return;
+  $('#setTitle').textContent = on.querySelector('span').textContent;
+  $('#val-general').textContent = S.lang === 'el' ? 'Ελληνικά' : 'English';
+  $('#val-playing').textContent = t({ tc: 'Timecode', time: 'Time', frames: 'Frames' }[S.clockMode] || '');
+  $('#val-frames').textContent = S.snapFormat.toUpperCase();
+  const lens = $('#setList .list-lens');
+  if (on.offsetHeight) { lens.style.transform = `translateY(${on.offsetTop}px)`; lens.style.height = `${on.offsetHeight}px`; lens.classList.add('on'); }
+}
+$('#setList').addEventListener('click', (e) => { const b = e.target.closest('button[data-page]'); if (b) showPage(b.dataset.page); });
 $('#openSettings').addEventListener('click', () => setOpen(true));
 $('#closeSettings').addEventListener('click', () => setOpen(false));
 $('#settings').addEventListener('click', (e) => { if (e.target.id === 'settings') setOpen(false); });
@@ -1808,19 +1828,19 @@ $('#cmp').addEventListener('pointerup', () => { wiping = false; });
 window.api.platform().then((p) => { platform = p; document.body.classList.add(p); });
 setBody('empty', true);
 $('#screen').classList.add('blank');
+if (S.startVolume === 'full') S.volume = 1;
 setVolume(S.volume);
 setMuted(S.muted);
 v.preservesPitch = S.keepPitch;
 $('#keepPitch').checked = $('#keepPitch2').checked = S.keepPitch;
 $('#keepPitch2').addEventListener('input', (e) => { S.keepPitch = e.target.checked; $('#keepPitch').checked = S.keepPitch; v.preservesPitch = S.keepPitch; save(); });
 $('#resume').checked = S.resume;
-for (const [id, key] of [['keepQueue', 'keepQueue'], ['autoplayOpen', 'autoplayOpen'], ['keepLook', 'keepLook'], ['keepSound', 'keepSound'], ['subAuto', 'subAuto'], ['sideStart', 'sideStart'], ['bezelTop', 'bezelTop']]) {
+for (const [id, key] of [['keepQueue', 'keepQueue'], ['autoplayOpen', 'autoplayOpen'], ['keepLook', 'keepLook'], ['keepSound', 'keepSound'], ['subAuto', 'subAuto'], ['bezelTop', 'bezelTop']]) {
   $('#' + id).checked = S[key];
   $('#' + id).addEventListener('input', (e) => { S[key] = e.target.checked; save(); });
 }
 $('#subLang').value = S.subLang; $('#subLang').addEventListener('input', (e) => { S.subLang = e.target.value.trim().toLowerCase(); save(); });
-if (S.startVolume === 'full') S.volume = 1;
-S.side = S.sideStart;
+setLoop(S.loop);
 $('#followPic').checked = $('#followPic2').checked = S.followPic;
 $('#onTop').checked = S.onTop; if (S.onTop) window.api.onTop(true);
 $('#bzTop').classList.toggle('on', S.onTop);

@@ -33,16 +33,57 @@ function startSize() {
   return { width: Math.min(1280, a.width - 40), height: Math.min(820, a.height - 40) };
 }
 
+// the window opens where and as it was left (Alex, 3 Nov: "it should remember how I left it"): its place and size,
+// maximized, full screen. userData/window.json; a place on a screen no longer there is dropped. The small bezel's
+// size and the picture's own full screen (F) are not kept: the window comes back as it was before them.
+const stateFile = () => path.join(app.getPath('userData'), 'window.json');
+let compactOn = false, htmlFull = false, saveTimer = null;
+function readState() {
+  try {
+    const s = JSON.parse(fs.readFileSync(stateFile(), 'utf8'));
+    if (!s || typeof s !== 'object') return {};
+    const ok = ['x', 'y', 'width', 'height'].every((k) => Number.isFinite(s[k])) && s.width >= 640 && s.height >= 360;
+    if (ok) {
+      // at least a good piece of the window's top on one of the screens there are now
+      const seen = screen.getAllDisplays().some(({ workArea: a }) => s.x + s.width - 80 > a.x && s.x + 80 < a.x + a.width && s.y >= a.y - 10 && s.y + 40 < a.y + a.height);
+      if (!seen) { delete s.x; delete s.y; }
+      const a = screen.getDisplayMatching({ x: s.x ?? 0, y: s.y ?? 0, width: s.width, height: s.height }).workArea;
+      s.width = Math.min(s.width, a.width); s.height = Math.min(s.height, a.height);
+    } else { delete s.x; delete s.y; delete s.width; delete s.height; }
+    return s;
+  } catch { return {}; }
+}
+let lastBounds = null;
+function writeState() {
+  if (!win || win.isDestroyed()) return;
+  const full = win.isFullScreen() && !htmlFull;
+  if (!compactOn && !win.isMinimized()) lastBounds = (win.isMaximized() || win.isFullScreen()) ? win.getNormalBounds() : win.getBounds();
+  const s = { ...(lastBounds || {}), maximized: win.isMaximized(), fullscreen: full };
+  try { fs.writeFileSync(stateFile(), JSON.stringify(s)); } catch {}
+}
+const writeStateSoon = () => { clearTimeout(saveTimer); saveTimer = setTimeout(writeState, 500); };
+
 function createWindow() {
   const frame = process.platform === 'darwin'
     ? { titleBarStyle: 'hiddenInset', trafficLightPosition: { x: 16, y: 21 } }
     : { titleBarStyle: 'hidden', titleBarOverlay: { color: '#2b3038', symbolColor: '#eef0f3', height: 58 } };
+  const was = readState();
+  const place = Number.isFinite(was.width) ? (Number.isFinite(was.x) ? { x: was.x, y: was.y, width: was.width, height: was.height } : { width: was.width, height: was.height, center: true }) : { ...startSize(), center: true };
+  if (Number.isFinite(was.width)) lastBounds = { x: was.x, y: was.y, width: was.width, height: was.height };
   win = new BrowserWindow({
-    ...startSize(), center: true, minWidth: 640, minHeight: 360, show: false, backgroundColor: '#1b1e23', autoHideMenuBar: true, ...frame,
+    ...place, minWidth: 640, minHeight: 360, show: false, backgroundColor: '#1b1e23', autoHideMenuBar: true, ...frame,
     title: 'RoarPlay',
     webPreferences: { preload: path.join(__dirname, 'preload.js'), contextIsolation: true, nodeIntegration: false },
   });
-  win.once('ready-to-show', () => win.show());
+  win.once('ready-to-show', () => {
+    if (was.maximized) win.maximize();
+    win.show();
+    if (was.fullscreen) win.setFullScreen(true);
+  });
+  for (const ev of ['resize', 'move', 'maximize', 'unmaximize', 'enter-full-screen', 'leave-full-screen']) win.on(ev, writeStateSoon);
+  win.on('enter-html-full-screen', () => { htmlFull = true; });
+  win.on('leave-html-full-screen', () => { htmlFull = false; writeStateSoon(); });
+  win.on('close', () => { clearTimeout(saveTimer); writeState(); });
   win.loadFile(path.join(__dirname, 'index.html'));
   win.webContents.once('did-finish-load', () => { if (waiting.length) { win.webContents.send('open-files', waiting); waiting = []; } });
   const outside = (url) => { if (/^https:\/\//i.test(url)) shell.openExternal(url); };
@@ -346,6 +387,8 @@ ipcMain.handle('compact', (_e, on) => {
   if (!win) return;
   if (process.platform === 'darwin') win.setWindowButtonVisibility(!on);
   win.setMinimumSize(on ? 240 : 640, on ? 160 : 360);
+  if (on) writeState();
+  compactOn = !!on;
 });
 ipcMain.handle('platform', () => process.platform);
 ipcMain.handle('version', () => app.getVersion());
