@@ -82,9 +82,16 @@ these is happening.
 - **Open with RoarPlay** (Settings): turn on groups of kinds (common video, camera and broadcast, music, studio sound…)
   or single kinds, press Apply once. RoarPlay asks the Mac first for the general kinds (two confirmations), then only for
   what is still missing, and shows which kinds already open with it. On Windows the system's Default apps page opens.
-- **Settings** in pages: General, Playing, Picture, Sound, Subtitles, Window, Saved frames, Open with RoarPlay, Keys,
-  with the list kept or not, play on open, the Shift jump, the look and the sound kept from file to file, a preferred
-  subtitle language, the fade delay, the side at start, the bezel on top, the saved frame's name.
+- **Settings** (since 0.6.0 laid out as RoarMail's): the pages in two groups on the left (The app: General, Window, Open
+  with RoarPlay, Keys; Playing: Playing, Picture, Sound, Subtitles, Saved frames), each with a line icon and, for some, its
+  current value, the chosen one lit from inside; the page's big title and the round close on the right; every page in
+  titled cards of rows (a name, a small line under it, the control on the right), round pills and segments. Inside: the
+  list kept or not, play on open, the Shift jump, the look and the sound kept from file to file, a preferred subtitle
+  language, the fade delay, the bezel on top, the saved frame's name, updates.
+- **Opens as you left it** (0.6.0, Alex 3 Nov): the window's place and size, maximized or full screen (userData/window.json,
+  main.js readState / writeState; a place on a screen that is gone is dropped, the small bezel's size is never kept), the
+  side open or closed and its tab, the tools behind ⋯ open or closed, the loop, the volume and mute, the speed, the scope
+  and every popover choice. A fresh install opens with the side closed.
 - A stream starts playing once two seconds have come, and the window takes its shape before it starts, so the first
   seconds do not stutter.
 

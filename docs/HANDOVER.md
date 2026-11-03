@@ -1,4 +1,4 @@
-# RoarPlay · where we stopped (2 Nov 2026)
+# RoarPlay · where we stopped (3 Nov 2026)
 
 Start a new session by reading this, CLAUDE.md and README.md. Talk to Alex in Greek, friendly and concrete, no em dashes.
 
@@ -22,7 +22,14 @@ Start a new session by reading this, CLAUDE.md and README.md. Talk to Alex in Gr
   brawCpu). On the CI's virtual GPU Metal was faster at Half (7.6 vs 5.6 fps) and slower at Low (10 vs 19-26): the real
   Mac decides; Alex is to try both on his clips and say which plays smoother. Metal's picture = CPU's (PSNR 48.7 dB).
 
+- 0.6.0 (Alex, 3 Nov: "the side must not show the first time; remember how I leave it"; "settings like RoarMail's"):
+  a fresh install opens with the side closed; RoarPlay opens as it was left (the window's place, size, maximized, full
+  screen in userData/window.json; the side and its tab, ⋯, loop, volume, speed, popover choices in the S settings; the
+  setting "The side open at start" is gone, the side is simply remembered). Settings rebuilt as RoarMail's sheet: pages
+  in two groups with icons and values, the sliding lit lens, big title, round close, titled cards of rows, round pills.
+
 ## Alex still has to
+- Update to 0.6.0: close RoarPlay with the side closed (or open), open it again and see it the same; look at Settings.
 - Update to 0.5.2 and play the 17K and PYXIS clips with the RAW button on Auto; if they still stutter, Settings >
   Playing > Blackmagic RAW is decoded by: try Processor, and say which is smoother (that becomes the start).
 - Update to 0.5.0 (Restart to update) and check: the BRAW clips (A001, the A038 ones from PYXIS 12K) without stripes,
