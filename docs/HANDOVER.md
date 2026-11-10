@@ -28,6 +28,8 @@ Start a new session by reading this, CLAUDE.md and README.md. Talk to Alex in Gr
   setting "The side open at start" is gone, the side is simply remembered). Settings rebuilt as RoarMail's sheet: pages
   in two groups with icons and values, the sliding lit lens, big title, round close, titled cards of rows, round pills.
 
+- 0.6.1: new icon (the Lab's one family of icons, 10 Nov 2026): build/icon.png and build/icon.svg.
+
 ## Alex still has to
 - Update to 0.6.0: close RoarPlay with the side closed (or open), open it again and see it the same; look at Settings.
 - Update to 0.5.2 and play the 17K and PYXIS clips with the RAW button on Auto; if they still stutter, Settings >
